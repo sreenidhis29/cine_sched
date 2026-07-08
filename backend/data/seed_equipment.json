@@ -1,0 +1,44 @@
+[
+  {
+    "key": "arri_alexa",
+    "name": "ARRI Alexa Mini LF Camera Package",
+    "quantity": 1,
+    "cost_per_day": 800.00,
+    "notes": "TENSION: Only 1 unit — shared equipment. Any two scenes requiring it on the same day creates a conflict."
+  },
+  {
+    "key": "drone_kit",
+    "name": "DJI Inspire 3 Drone Kit",
+    "quantity": 1,
+    "cost_per_day": 600.00,
+    "notes": "Drone — also only 1 unit. EXT scenes only."
+  },
+  {
+    "key": "lighting_kit",
+    "name": "HMI Lighting Package (12 heads)",
+    "quantity": 2,
+    "cost_per_day": 400.00,
+    "notes": "2 units available — most scenes require 1"
+  },
+  {
+    "key": "grip_truck",
+    "name": "Grip/Electric Truck",
+    "quantity": 1,
+    "cost_per_day": 350.00,
+    "notes": "Only 1 unit — must be at one location per day"
+  },
+  {
+    "key": "sound_kit",
+    "name": "Sound Recording Package",
+    "quantity": 2,
+    "cost_per_day": 250.00,
+    "notes": "2 units — usually sufficient"
+  },
+  {
+    "key": "steadicam",
+    "name": "Steadicam Rig",
+    "quantity": 1,
+    "cost_per_day": 300.00,
+    "notes": "Specialty item — only some scenes need it"
+  }
+]

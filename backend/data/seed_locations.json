@@ -1,0 +1,46 @@
+[
+  {
+    "key": "warehouse_district",
+    "name": "Warehouse District",
+    "address": "450 Industrial Blvd, Los Angeles, CA 90013",
+    "latitude": 34.0366,
+    "longitude": -118.2356,
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-15",
+    "cost_per_day": 1200.00,
+    "notes": "Primary interior set — wide availability window"
+  },
+  {
+    "key": "rooftop_downtown",
+    "name": "Downtown Rooftop",
+    "address": "800 S Hope St, Los Angeles, CA 90017",
+    "latitude": 34.0491,
+    "longitude": -118.2580,
+    "availability_start": "2024-03-04",
+    "availability_end": "2024-03-10",
+    "cost_per_day": 2000.00,
+    "notes": "TENSION: very tight window — only 7 days available, expensive"
+  },
+  {
+    "key": "suburban_house",
+    "name": "Suburban House",
+    "address": "22 Maple Ave, Culver City, CA 90232",
+    "latitude": 34.0212,
+    "longitude": -118.3965,
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 600.00,
+    "notes": "Affordable, wide window"
+  },
+  {
+    "key": "city_park",
+    "name": "Griffith Park Meadow",
+    "address": "4730 Crystal Springs Dr, Los Angeles, CA 90027",
+    "latitude": 34.1365,
+    "longitude": -118.2940,
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 400.00,
+    "notes": "EXT location — subject to weather risk in Phase 3"
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "total_limit": 85000.00,
+  "cast_cap": 40000.00,
+  "location_cap": 20000.00,
+  "equipment_cap": 15000.00,
+  "notes": "TENSION: Budget is intentionally tight. A full 10-day shoot at all preferred locations and full cast would exceed the total by ~$12k. The solver must find a cheaper arrangement, which may require relaxing actor availability or location choices."
+}

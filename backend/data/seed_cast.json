@@ -1,0 +1,74 @@
+[
+  {
+    "key": "eleanor_voss",
+    "name": "Eleanor Voss",
+    "role": "Lead — Detective Marlowe",
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 3000.00,
+    "notes": "Lead actor, wide availability"
+  },
+  {
+    "key": "marcus_cole",
+    "name": "Marcus Cole",
+    "role": "Antagonist — Viktor Rane",
+    "availability_start": "2024-03-05",
+    "availability_end": "2024-03-10",
+    "cost_per_day": 2500.00,
+    "notes": "TENSION: extremely narrow window — only 6 days. Shares all rooftop scenes. Must resolve with location window."
+  },
+  {
+    "key": "priya_nair",
+    "name": "Priya Nair",
+    "role": "Supporting — Informant Lisa",
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-12",
+    "cost_per_day": 1200.00,
+    "notes": "Available first 12 days only"
+  },
+  {
+    "key": "james_okafor",
+    "name": "James Okafor",
+    "role": "Supporting — Police Chief Reed",
+    "availability_start": "2024-03-08",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 1400.00,
+    "notes": "Available from day 8 onwards"
+  },
+  {
+    "key": "sarah_lin",
+    "name": "Sarah Lin",
+    "role": "Day Player — Witness",
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 700.00,
+    "notes": "Wide availability, lower budget impact"
+  },
+  {
+    "key": "tom_brecker",
+    "name": "Tom Brecker",
+    "role": "Day Player — Crime Scene Tech",
+    "availability_start": "2024-03-01",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 600.00,
+    "notes": "Wide availability"
+  },
+  {
+    "key": "diana_walsh",
+    "name": "Diana Walsh",
+    "role": "Supporting — DA Prosecutor",
+    "availability_start": "2024-03-10",
+    "availability_end": "2024-03-20",
+    "cost_per_day": 1100.00,
+    "notes": "Available from day 10 onwards — scheduling constraint with Priya"
+  },
+  {
+    "key": "alex_petrov",
+    "name": "Alex Petrov",
+    "role": "Supporting — Henchman",
+    "availability_start": "2024-03-03",
+    "availability_end": "2024-03-08",
+    "cost_per_day": 800.00,
+    "notes": "Very narrow window — only 6 days total"
+  }
+]
