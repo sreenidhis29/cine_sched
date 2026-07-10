@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 
 from agents.state import GraphState
+from agents.utils import write_trace, Timer
 from tools.solver_tool import RunSolverInput, run_solver
 
 logger = logging.getLogger(__name__)
@@ -33,11 +34,25 @@ def scheduler_agent(state: GraphState) -> GraphState:
         state.get("relaxed_constraints", [])
     )
 
-    result = run_solver(inp)
+    with Timer() as t:
+        result = run_solver(inp)
+    
     logger.info(
         "scheduler_agent result: feasible=%s, cost=%.2f, days=%d, violations=%s",
         result.feasible, result.total_cost, result.num_shoot_days, result.violations
     )
+
+    if state.get("project_id") and state.get("run_id"):
+        write_trace(
+            project_id=state["project_id"],
+            run_id=state["run_id"],
+            agent_name="CP-SAT Scheduler",
+            input_summary=f"Running CP-SAT solver with {len(inp.relaxed_constraints)} relaxed constraints.",
+            output_summary=f"Computed schedule in {t.duration_ms}ms. Feasible: {result.feasible}, Total Cost: ${result.total_cost:,.2f}, Violations: {len(result.violations)}",
+            tool_calls=[{"tool": "run_solver", "args": {"relaxed_constraints": inp.relaxed_constraints}}],
+            duration_ms=t.duration_ms,
+            confidence="high" if result.feasible else "medium"
+        )
 
     return {
         **state,

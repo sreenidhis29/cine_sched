@@ -20,6 +20,7 @@ from typing import List
 from pydantic import BaseModel
 
 from agents.state import GraphState
+from agents.utils import write_trace, read_agent_memory, write_agent_memory, Timer
 from llm.router import LLMRouterError, structured_call
 
 logger = logging.getLogger(__name__)
@@ -56,8 +57,9 @@ def critic_agent(state: GraphState) -> GraphState:
     Aggregate violations, decide whether to accept or replan, and
     optionally choose a constraint relaxation via the LLM router.
     """
-    # ── Collect all violations ─────────────────────────────────────────────
-    all_violations: List[str] = []
+    with Timer() as t:
+        # ── Collect all violations ─────────────────────────────────────────────
+        all_violations: List[str] = []
 
     solver_infeasible = (
         state.get("current_schedule") is None
@@ -95,6 +97,19 @@ def critic_agent(state: GraphState) -> GraphState:
             + "\n".join(f"  • {v}" for v in all_violations)
         )
         logger.warning("critic_agent: cap reached — rejecting. %s", reason)
+        
+        if state.get("project_id") and state.get("run_id"):
+            write_trace(
+                project_id=state["project_id"],
+                run_id=state["run_id"],
+                agent_name="Critic Agent",
+                input_summary=f"Iteration {iteration}/{MAX_ITERATIONS}. Found {len(all_violations)} violations.",
+                output_summary=f"Max iterations reached. Giving up.",
+                tool_calls=[],
+                duration_ms=t.duration_ms,
+                confidence="low"
+            )
+
         return {
             **state,
             "accepted": False,
@@ -117,6 +132,10 @@ def critic_agent(state: GraphState) -> GraphState:
         for l in locations
     )
 
+    project_id = state.get("project_id")
+    past_memory = read_agent_memory(project_id) if project_id else []
+    memory_info = json.dumps(past_memory, indent=2) if past_memory else "No past decisions available."
+
     user_message = f"""
 Current violations (iteration {iteration + 1}):
 {chr(10).join(f'  - {v}' for v in all_violations)}
@@ -129,6 +148,9 @@ Available cast members:
 
 Available locations:
 {loc_info}
+
+Past decisions memory (use this context to avoid repeating bad relaxations across runs):
+{memory_info}
 
 Choose exactly ONE constraint to relax to make the schedule feasible.
 """
@@ -145,6 +167,27 @@ Choose exactly ONE constraint to relax to make the schedule feasible.
             new_relaxation, decision.rationale
         )
         new_relaxed = list(set(already_relaxed + [new_relaxation]))
+        
+        if state.get("project_id"):
+            write_agent_memory(
+                project_id=state["project_id"],
+                decision_type="constraint_relaxation",
+                context={"violations": all_violations, "iteration": iteration},
+                outcome=new_relaxation
+            )
+
+        if state.get("project_id") and state.get("run_id"):
+            write_trace(
+                project_id=state["project_id"],
+                run_id=state["run_id"],
+                agent_name="Critic Agent",
+                input_summary=f"Iteration {iteration+1}. Violations: {len(all_violations)}. Past memory: {len(past_memory)} entries.",
+                output_summary=f"Decided to relax: {new_relaxation}. Rationale: {decision.rationale}",
+                tool_calls=[{"tool": "structured_call", "args": {"schema": "RelaxationDecision"}}],
+                duration_ms=t.duration_ms,
+                confidence="medium"
+            )
+
         return {
             **state,
             "relaxed_constraints": new_relaxed,
@@ -154,6 +197,19 @@ Choose exactly ONE constraint to relax to make the schedule feasible.
         }
     except LLMRouterError as e:
         logger.error("critic_agent: LLM failed, cannot choose relaxation: %s", e)
+        
+        if state.get("project_id") and state.get("run_id"):
+            write_trace(
+                project_id=state["project_id"],
+                run_id=state["run_id"],
+                agent_name="Critic Agent",
+                input_summary=f"Attempting to decide relaxation via LLM.",
+                output_summary=f"LLM Error: {e}",
+                tool_calls=[],
+                duration_ms=t.duration_ms,
+                confidence="low"
+            )
+
         return {
             **state,
             "accepted": False,

@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any, Dict
 
 from agents.state import GraphState
+from agents.utils import write_trace, Timer
 from models.schemas import (
     SolverBudget,
     SolverCastMember,
@@ -35,20 +36,33 @@ def parser_agent(state: GraphState) -> GraphState:
     equipment= state.get("equipment", []) or []
     budget   = state.get("budget") or SolverBudget(total_limit=0)
 
-    logger.info(
-        "parser_agent: %d scenes, %d cast, %d locations, %d equipment",
-        len(scenes), len(cast), len(locations), len(equipment)
-    )
+    with Timer() as t:
+        logger.info(
+            "parser_agent: %d scenes, %d cast, %d locations, %d equipment",
+            len(scenes), len(cast), len(locations), len(equipment)
+        )
 
-    # Warn about scenes with unknown locations or cast
-    loc_ids  = {l.id for l in locations}
-    cast_ids = {c.id for c in cast}
-    for s in scenes:
-        if s.location_id and s.location_id not in loc_ids:
-            logger.warning("Scene '%s' references unknown location_id '%s'", s.title, s.location_id)
-        for cid in s.cast_member_ids:
-            if cid not in cast_ids:
-                logger.warning("Scene '%s' references unknown cast_id '%s'", s.title, cid)
+        # Warn about scenes with unknown locations or cast
+        loc_ids  = {l.id for l in locations}
+        cast_ids = {c.id for c in cast}
+        for s in scenes:
+            if s.location_id and s.location_id not in loc_ids:
+                logger.warning("Scene '%s' references unknown location_id '%s'", s.title, s.location_id)
+            for cid in s.cast_member_ids:
+                if cid not in cast_ids:
+                    logger.warning("Scene '%s' references unknown cast_id '%s'", s.title, cid)
+
+    if state.get("project_id") and state.get("run_id"):
+        write_trace(
+            project_id=state["project_id"],
+            run_id=state["run_id"],
+            agent_name="Parser Agent",
+            input_summary="Raw input constraints and entities.",
+            output_summary=f"Parsed {len(scenes)} scenes, {len(cast)} cast, {len(locations)} locations, {len(equipment)} equipment items.",
+            tool_calls=[],
+            duration_ms=t.duration_ms,
+            confidence="high"
+        )
 
     return {
         **state,

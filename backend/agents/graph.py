@@ -48,19 +48,19 @@ def build_graph() -> StateGraph:
     # ── Register nodes ──────────────────────────────────────────────────────
     builder.add_node("parser",       parser_agent)
     builder.add_node("scheduler",    scheduler_agent)
-    builder.add_node("availability", availability_agent)
-    builder.add_node("constraint",   constraint_agent)
-    builder.add_node("budget",       budget_agent)
+    builder.add_node("availability_eval", availability_agent)
+    builder.add_node("constraint_eval",   constraint_agent)
+    builder.add_node("budget_eval",       budget_agent)
     builder.add_node("critic",       critic_agent)
     builder.add_node("explainer",    explainer_agent)
 
     # ── Define edges ────────────────────────────────────────────────────────
     builder.set_entry_point("parser")
     builder.add_edge("parser",       "scheduler")
-    builder.add_edge("scheduler",    "availability")
-    builder.add_edge("availability", "constraint")
-    builder.add_edge("constraint",   "budget")
-    builder.add_edge("budget",       "critic")
+    builder.add_edge("scheduler",    "availability_eval")
+    builder.add_edge("availability_eval", "constraint_eval")
+    builder.add_edge("constraint_eval",   "budget_eval")
+    builder.add_edge("budget_eval",       "critic")
 
     # Conditional: critic → scheduler (replan) OR critic → explainer (done)
     builder.add_conditional_edges(

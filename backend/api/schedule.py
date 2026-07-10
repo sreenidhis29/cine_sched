@@ -19,7 +19,7 @@ from agents.state import GraphState
 from api.auth import get_current_user_id
 from db.models import (
     Budget, CastMember, Equipment, Location, Project, Schedule,
-    ScheduleEntry, Scene, SceneEquipment,
+    ScheduleEntry, Scene, SceneEquipment, ReasoningTrace
 )
 from db.session import get_db
 from llm.router import chat as llm_chat, LLMRouterError
@@ -100,7 +100,7 @@ def _save_schedule(
 ) -> Schedule:
     """Persist the pipeline result to the schedules table."""
     solver_result = final_state.get("current_schedule")
-    run_id = str(uuid4())
+    run_id = final_state.get("run_id") or str(uuid4())
 
     # Delete old schedules for this project (keep latest only in Phase 1)
     db.query(Schedule).filter(Schedule.project_id == project_id).delete()
@@ -161,6 +161,7 @@ def run_schedule(
 
     initial_state: GraphState = {
         "project_id":           project_id,
+        "run_id":               str(uuid4()),
         "scenes":               scenes,
         "cast":                 cast,
         "locations":            locations,
@@ -204,6 +205,50 @@ def get_schedule(
         raise HTTPException(status_code=404, detail="No schedule found — run the scheduler first.")
 
     return _schedule_to_response(schedule)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /projects/{id}/trace
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/{project_id}/trace")
+def get_trace(
+    project_id: str,
+    run_id: str = None,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Get the reasoning trace for a specific schedule run."""
+    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    query = db.query(ReasoningTrace).filter(ReasoningTrace.project_id == project_id)
+    if run_id:
+        query = query.filter(ReasoningTrace.run_id == run_id)
+    else:
+        # If no run_id, grab the most recent run_id from schedules
+        latest_schedule = db.query(Schedule).filter(Schedule.project_id == project_id).order_by(Schedule.created_at.desc()).first()
+        if latest_schedule:
+            query = query.filter(ReasoningTrace.run_id == latest_schedule.run_id)
+
+    traces = query.order_by(ReasoningTrace.timestamp.asc()).all()
+
+    return {
+        "project_id": project_id,
+        "run_id": run_id or (latest_schedule.run_id if 'latest_schedule' in locals() and latest_schedule else None),
+        "traces": [
+            {
+                "id": str(t.id),
+                "agent_name": t.agent_name,
+                "timestamp": t.timestamp,
+                "input_summary": t.input_summary,
+                "output_summary": t.output_summary,
+                "tool_calls": t.tool_calls,
+                "duration_ms": t.duration_ms,
+                "confidence": t.confidence,
+            } for t in traces
+        ]
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -260,6 +305,7 @@ Return a brief explanation of how you interpreted the question and what changes 
     # Re-run pipeline with context from the what-if question
     initial_state: GraphState = {
         "project_id":           project_id,
+        "run_id":               str(uuid4()),
         "scenes":               scenes,
         "cast":                 cast,
         "locations":            locations,

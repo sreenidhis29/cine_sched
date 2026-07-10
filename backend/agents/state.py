@@ -21,6 +21,7 @@ from models.schemas import (
 class GraphState(TypedDict, total=False):
     # ── Input data ───────────────────────────────────────────────────────────
     project_id: str
+    run_id: str
     scenes: List[SolverScene]
     cast: List[SolverCastMember]
     locations: List[SolverLocation]

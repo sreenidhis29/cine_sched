@@ -1,24 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #0f172a; /* Slate 900 */
-  --foreground: #f8fafc; /* Slate 50 */
-  --primary: #3b82f6; /* Blue 500 */
-  --primary-hover: #2563eb; /* Blue 600 */
-  --secondary: #1e293b; /* Slate 800 */
-  --accent: #8b5cf6; /* Violet 500 */
-}
-
-body {
-  background-color: var(--background);
-  color: var(--foreground);
+@layer base {
+  body {
+    background-color: #131313;
+    color: #e4e2e1;
+    font-family: 'Inter', sans-serif;
+  }
 }
 
 @layer utilities {
-  .glass {
-    background-color: rgba(30, 41, 59, 0.5);
-    @apply backdrop-blur-md border border-white/10;
+  .input-focus-ring:focus {
+    outline: none;
+    border-color: #ffb800;
+    box-shadow: 0 0 0 1px #ffb800;
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
 }

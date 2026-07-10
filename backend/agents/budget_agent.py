@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 
 from agents.state import GraphState
+from agents.utils import write_trace, Timer
 from tools.budget_tools import (
     BudgetCapInput,
     ScheduleCostInput,
@@ -35,15 +36,16 @@ def budget_agent(state: GraphState) -> GraphState:
     budget    = state.get("budget")
     entries   = schedule.schedule
 
-    cost_result = calc_schedule_cost(ScheduleCostInput(
-        scenes=scenes,
-        cast=cast,
-        locations=locations,
-        equipment=equipment,
-        schedule=entries,
-    ))
+    with Timer() as t:
+        cost_result = calc_schedule_cost(ScheduleCostInput(
+            scenes=scenes,
+            cast=cast,
+            locations=locations,
+            equipment=equipment,
+            schedule=entries,
+        ))
 
-    budget_result = check_budget_cap(BudgetCapInput(cost_result=cost_result, budget=budget))
+        budget_result = check_budget_cap(BudgetCapInput(cost_result=cost_result, budget=budget))
 
     logger.info(
         "budget_agent: total=%.2f, cast=%.2f, location=%.2f, equip=%.2f | violations=%d",
@@ -53,6 +55,22 @@ def budget_agent(state: GraphState) -> GraphState:
         cost_result.equipment_cost,
         len(budget_result.violations),
     )
+
+    if state.get("project_id") and state.get("run_id"):
+        output_summary = f"Total Cost: ${cost_result.total_cost:,.2f}. Found {len(budget_result.violations)} violations."
+        if budget_result.warnings:
+            output_summary += f" ({len(budget_result.warnings)} warnings)"
+        
+        write_trace(
+            project_id=state["project_id"],
+            run_id=state["run_id"],
+            agent_name="Budget Validator",
+            input_summary="Calculating total schedule cost and comparing against budget limits.",
+            output_summary=output_summary,
+            tool_calls=[{"tool": "calc_schedule_cost", "args": {}}, {"tool": "check_budget_cap", "args": {}}],
+            duration_ms=t.duration_ms,
+            confidence="high"
+        )
 
     return {
         **state,

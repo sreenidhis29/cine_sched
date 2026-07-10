@@ -46,3 +46,11 @@ alembic.ini
 
 # Ignore all text files
 *.txt
+
+# Ignore .env files
+.env
+.env.local
+.env.*.local
+*.env
+.env.example
+stitch_tungsten_production_intelligence

@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import Dict, List
 
 from agents.state import GraphState
+from agents.utils import write_trace, Timer
 from llm.router import LLMRouterError, chat
 
 logger = logging.getLogger(__name__)
@@ -101,18 +102,31 @@ def explainer_agent(state: GraphState) -> GraphState:
             f"Please provide a clear, encouraging explanation of this schedule for the producer."
         )
 
-    try:
-        explanation = chat(
-            messages=[{"role": "user", "content": prompt}],
-            system_prompt=EXPLAINER_SYSTEM_PROMPT,
-            temperature=0.4,
-            max_tokens=600,
-        )
-    except LLMRouterError as e:
-        logger.error("explainer_agent: LLM failed: %s", e)
-        explanation = (
-            f"{'✅ Schedule accepted.' if accepted else '❌ Schedule could not be finalized.'}\n\n"
-            f"{schedule_text}\n\n{relaxation_text}\n\n{budget_text}"
+    with Timer() as t:
+        try:
+            explanation = chat(
+                messages=[{"role": "user", "content": prompt}],
+                system_prompt=EXPLAINER_SYSTEM_PROMPT,
+                temperature=0.4,
+                max_tokens=600,
+            )
+        except LLMRouterError as e:
+            logger.error("explainer_agent: LLM failed: %s", e)
+            explanation = (
+                f"{'✅ Schedule accepted.' if accepted else '❌ Schedule could not be finalized.'}\n\n"
+                f"{schedule_text}\n\n{relaxation_text}\n\n{budget_text}"
+            )
+
+    if state.get("project_id") and state.get("run_id"):
+        write_trace(
+            project_id=state["project_id"],
+            run_id=state["run_id"],
+            agent_name="Explainer Agent",
+            input_summary="Generating a natural-language summary of the final schedule output.",
+            output_summary=f"Generated explanation ({len(explanation)} chars).",
+            tool_calls=[{"tool": "chat", "args": {}}],
+            duration_ms=t.duration_ms,
+            confidence="high"
         )
 
     return {**state, "final_explanation": explanation}

@@ -18,7 +18,7 @@ from sqlalchemy.sql import func
 
 
 class Base(DeclarativeBase):
-    pass
+    __allow_unmapped__ = True
 
 
 def _uuid():
@@ -210,3 +210,39 @@ class ScheduleEntry(Base):
 
     schedule : Schedule = relationship("Schedule", back_populates="entries")
     scene    : Scene    = relationship("Scene")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REASONING TRACE (PHASE 2)
+# ─────────────────────────────────────────────────────────────────────────────
+class ReasoningTrace(Base):
+    __tablename__ = "reasoning_trace"
+
+    id              = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    project_id      = Column(UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    run_id          = Column(UUID(as_uuid=False), nullable=False)
+    agent_name      = Column(String, nullable=False)
+    timestamp       = Column(DateTime(timezone=True), server_default=func.now())
+    input_summary   = Column(Text)
+    output_summary  = Column(Text)
+    tool_calls      = Column(JSON, default=list)
+    duration_ms     = Column(Integer)
+    confidence      = Column(String(20), default="medium")
+
+    project : Project = relationship("Project")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AGENT MEMORY (PHASE 2)
+# ─────────────────────────────────────────────────────────────────────────────
+class AgentMemory(Base):
+    __tablename__ = "agent_memory"
+
+    id              = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    project_id      = Column(UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    decision_type   = Column(String, nullable=False)
+    context         = Column(JSON, default=dict)
+    outcome         = Column(Text)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    project : Project = relationship("Project")
