@@ -5,37 +5,82 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/apiClient';
 
 export default function ScheduleViewPage() {
   const params = useParams();
   const projectId = params.id as string;
 
+  const [project, setProject] = useState<any>(null);
   const [schedule, setSchedule] = useState<any>(null);
   const [scenes, setScenes] = useState<any[]>([]);
+  const [budget, setBudget] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // What-If State
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const token = localStorage.getItem('access_token');
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const baseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}`;
-
-        const [scheduleRes, scenesRes] = await Promise.all([
-          fetch(`${baseUrl}/schedule`, { headers }),
-          fetch(`${baseUrl}/scenes`, { headers })
-        ]);
-
-        if (scheduleRes.ok) setSchedule(await scheduleRes.json());
-        if (scenesRes.ok) setScenes(await scenesRes.json());
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+        const projectData = await apiClient.get(`/api/projects/${projectId}`);
+        if (projectData) setProject(projectData);
+      } catch (e) {
+        console.error("Failed to load project details:", e);
       }
+
+      try {
+        const budgetData = await apiClient.get(`/api/projects/${projectId}/budget`);
+        if (budgetData) setBudget(budgetData);
+      } catch (e) {
+        console.error("Failed to load budget details:", e);
+      }
+
+      try {
+        const scenesData = await apiClient.get(`/api/projects/${projectId}/scenes`);
+        if (scenesData) setScenes(scenesData);
+      } catch (e) {
+        console.error("Failed to load scenes:", e);
+      }
+
+      try {
+        const scheduleData = await apiClient.get(`/api/projects/${projectId}/schedule`);
+        if (scheduleData) setSchedule(scheduleData);
+      } catch (e) {
+        console.error("Failed to load schedule (might not exist yet):", e);
+      }
+      setLoading(false);
     };
     fetchData();
   }, [projectId]);
+
+  const handleWhatIfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMessage.trim()) return;
+    
+    const userMsg = chatMessage;
+    setChatHistory(prev => [...prev, {role: 'user', content: userMsg}]);
+    setChatMessage('');
+    setChatLoading(true);
+
+    try {
+      const data = await apiClient.post(`/api/projects/${projectId}/whatif`, {
+        message: userMsg
+      });
+      setChatHistory(prev => [...prev, {role: 'assistant', content: 'Schedule updated based on your scenario.'}]);
+      // The whatif endpoint presumably runs a new schedule or returns an updated one.
+      // We refetch the schedule to get the latest state.
+      const newScheduleData = await apiClient.get(`/api/projects/${projectId}/schedule`);
+      if (newScheduleData) setSchedule(newScheduleData);
+    } catch (err: any) {
+      setChatHistory(prev => [...prev, {role: 'assistant', content: `Error: ${err.message}`}]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   // Group entries by day
   const scheduleDays = React.useMemo(() => {
@@ -74,24 +119,26 @@ export default function ScheduleViewPage() {
         
         {/* Main Schedule Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex justify-between items-end pb-4 mb-stack-md flex-shrink-0">
-            <div>
-              <div className="flex items-center gap-2 text-on-surface-variant font-label-md uppercase tracking-wider mb-2">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 pb-4 mb-stack-md border-b border-outline-variant/30 flex-shrink-0">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-on-surface-variant font-label-md uppercase tracking-wider mb-2 text-xs">
                 <Link href="/projects" className="hover:text-primary-container transition-colors">Projects</Link>
                 <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                <Link href={`/projects/${projectId}`} className="hover:text-primary-container transition-colors">Project</Link>
+                <Link href={`/projects/${projectId}`} className="hover:text-primary-container transition-colors truncate max-w-[150px]">
+                  {project?.name || 'Loading...'}
+                </Link>
                 <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                <span>Master Schedule</span>
+                <span className="text-on-surface font-semibold">Master Schedule</span>
               </div>
               <h1 className="font-headline-lg text-headline-lg font-bold tracking-tight text-on-surface">Master Schedule</h1>
             </div>
-            <div className="flex gap-3">
-              <Link href={`/projects/${projectId}/trace`} className="flex items-center gap-2 border border-primary-container text-primary-container hover:bg-primary-container/10 px-4 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all">
-                <span className="material-symbols-outlined text-[18px]">psychology</span>
+            <div className="flex flex-wrap gap-3 flex-shrink-0">
+              <Link href={`/projects/${projectId}/trace`} className="flex items-center gap-2 border border-primary-container text-primary-container hover:bg-primary-container/10 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs">
+                <span className="material-symbols-outlined text-[16px]">psychology</span>
                 View Reasoning Trace
               </Link>
-              <button className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-4 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all">
-                <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+              <button className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs">
+                <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
                 Export
               </button>
             </div>
@@ -161,23 +208,39 @@ export default function ScheduleViewPage() {
                 <div>
                   <div className="flex justify-between text-[11px] font-label-md uppercase tracking-wider text-on-surface-variant mb-1">
                     <span>Burn Rate</span>
-                    <span className="text-primary-container">{schedule.total_cost ? Math.min(100, (schedule.total_cost / 150000) * 100).toFixed(0) : 0}%</span>
+                    <span className="text-primary-container">
+                      {budget && parseFloat(budget.total_limit) > 0 
+                        ? `${Math.min(100, (schedule.total_cost / parseFloat(budget.total_limit)) * 100).toFixed(0)}%` 
+                        : '0%'}
+                    </span>
                   </div>
                   <div className="h-1.5 w-full bg-surface-bright rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-primary-container rounded-full" 
-                      style={{ width: `${schedule.total_cost ? Math.min(100, (schedule.total_cost / 150000) * 100) : 0}%` }} 
+                      style={{ 
+                        width: `${budget && parseFloat(budget.total_limit) > 0 
+                          ? Math.min(100, (schedule.total_cost / parseFloat(budget.total_limit)) * 100) 
+                          : 0}%` 
+                      }} 
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-outline-variant/30">
                   <div>
                     <div className="font-label-md text-[10px] text-on-surface-variant uppercase mb-1">Estimated Cost</div>
-                    <div className="font-mono-data text-on-surface text-[14px]">${schedule.total_cost || 'N/A'}</div>
+                    <div className="font-mono-data text-on-surface text-[14px]">
+                      {schedule.total_cost !== undefined && schedule.total_cost !== null 
+                        ? `$${schedule.total_cost.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+                        : '$N/A'}
+                    </div>
                   </div>
                   <div>
                     <div className="font-label-md text-[10px] text-on-surface-variant uppercase mb-1">Budget Cap</div>
-                    <div className="font-mono-data text-on-surface-variant text-[14px]">$150,000</div>
+                    <div className="font-mono-data text-on-surface-variant text-[14px]">
+                      {budget && parseFloat(budget.total_limit) > 0 
+                        ? `$${parseFloat(budget.total_limit).toLocaleString('en-US', { maximumFractionDigits: 0 })}` 
+                        : '$N/A'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -191,7 +254,7 @@ export default function ScheduleViewPage() {
                 <span className="material-symbols-outlined text-[18px]">psychology</span>
                 CineFlow AI Analysis
               </h3>
-              <div className="space-y-3 font-body-md text-[13px] text-on-surface leading-relaxed">
+              <div className="space-y-3 font-body-md text-[13px] text-on-surface leading-relaxed max-h-[300px] overflow-y-auto custom-scrollbar">
                 <p>
                   The current schedule achieves <strong className="text-white">{satisfactionScore}% constraint satisfaction</strong>.
                 </p>
@@ -219,6 +282,44 @@ export default function ScheduleViewPage() {
               </div>
             </Card>
           )}
+
+          {/* What-If Chat */}
+          <Card className="flex-shrink-0 flex flex-col h-[400px]">
+             <h3 className="font-label-md uppercase tracking-wider text-on-surface-variant mb-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">chat</span>
+                What-If Scenario
+             </h3>
+             <div className="flex-1 overflow-y-auto mb-3 space-y-3 text-[13px] custom-scrollbar">
+               {chatHistory.length === 0 && (
+                 <p className="text-on-surface-variant italic text-center mt-4">Ask CineFlow to adjust the schedule (e.g. &quot;What if John gets sick tomorrow?&quot;)</p>
+               )}
+               {chatHistory.map((msg, idx) => (
+                 <div key={idx} className={`p-2 rounded max-w-[90%] ${msg.role === 'user' ? 'bg-primary-container/20 border border-primary-container/30 text-on-surface self-end ml-auto' : 'bg-surface-container border border-outline-variant text-on-surface-variant'}`}>
+                   {msg.content}
+                 </div>
+               ))}
+               {chatLoading && (
+                 <div className="text-on-surface-variant italic text-xs animate-pulse">CineFlow is calculating new schedule...</div>
+               )}
+             </div>
+             <form onSubmit={handleWhatIfSubmit} className="flex gap-2 border-t border-outline-variant/30 pt-3">
+               <input 
+                 type="text" 
+                 value={chatMessage} 
+                 onChange={e => setChatMessage(e.target.value)} 
+                 placeholder="Type scenario..." 
+                 className="flex-1 bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:border-primary-container focus:outline-none transition-colors"
+                 disabled={chatLoading}
+               />
+               <button 
+                 type="submit" 
+                 disabled={chatLoading || !chatMessage.trim()} 
+                 className="bg-primary-container text-on-primary-fixed-variant px-3 py-2 rounded hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+               >
+                 <span className="material-symbols-outlined text-[18px]">send</span>
+               </button>
+             </form>
+          </Card>
 
         </div>
       </div>

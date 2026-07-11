@@ -150,9 +150,8 @@ def run_schedule(
     Run the LangGraph scheduling pipeline for this project.
     Returns the resulting schedule (accepted or rejected with explanation).
     """
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
+    from api.projects import _require_project
+    p = _require_project(project_id, user_id, db)
 
     scenes, cast, locations, equipment, budget = _build_solver_data(project_id, db)
 
@@ -191,9 +190,8 @@ def get_schedule(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
+    from api.projects import _require_project
+    p = _require_project(project_id, user_id, db)
 
     schedule = (
         db.query(Schedule)
@@ -218,9 +216,8 @@ def get_trace(
     user_id: str = Depends(get_current_user_id),
 ):
     """Get the reasoning trace for a specific schedule run."""
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
+    from api.projects import _require_project
+    p = _require_project(project_id, user_id, db)
 
     query = db.query(ReasoningTrace).filter(ReasoningTrace.project_id == project_id)
     if run_id:
@@ -265,9 +262,8 @@ def whatif(
     Process a natural-language what-if question by extracting constraint relaxations
     via the LLM router, then re-running the scheduling pipeline.
     """
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
+    from api.projects import _require_project
+    p = _require_project(project_id, user_id, db)
 
     scenes, cast, locations, equipment, budget = _build_solver_data(project_id, db)
 

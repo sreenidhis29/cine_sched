@@ -12,6 +12,49 @@ from pydantic import BaseModel, Field
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ORGANIZATION & MEMBERS
+# ─────────────────────────────────────────────────────────────────────────────
+class OrgMemberBase(BaseModel):
+    org_role: str
+    status: Optional[str] = "active"
+    invited_email: Optional[str] = None
+
+
+class OrgMemberResponse(OrgMemberBase):
+    id: str
+    org_id: str
+    user_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+    
+    # We might want to include user info if joined
+    user_name: Optional[str] = None
+    user_email: Optional[str] = None
+    default_password: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class OrganizationBase(BaseModel):
+    name: str
+
+
+class OrganizationCreate(OrganizationBase):
+    pass
+
+
+class OrganizationUpdate(OrganizationBase):
+    name: Optional[str] = None
+
+
+class OrganizationResponse(OrganizationBase):
+    id: str
+    owner_user_id: str
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # LOCATION
 # ─────────────────────────────────────────────────────────────────────────────
 class LocationBase(BaseModel):
@@ -46,6 +89,7 @@ class LocationResponse(LocationBase):
 class CastMemberBase(BaseModel):
     name: str
     role: Optional[str] = None
+    linked_email: Optional[str] = None
     availability_start: Optional[date] = None
     availability_end: Optional[date] = None
     cost_per_day: float = 0.0
@@ -62,9 +106,44 @@ class CastMemberUpdate(CastMemberBase):
 class CastMemberResponse(CastMemberBase):
     id: str
     project_id: str
+    user_id: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCRIPT BREAKDOWN (LLM EXTRACTION)
+# ─────────────────────────────────────────────────────────────────────────────
+class ExtractedCast(BaseModel):
+    name: str
+    role: str
+
+class ExtractedEquipment(BaseModel):
+    name: str
+    quantity: int = 1
+    cost_per_day: float = 0.0
+
+class ExtractedScene(BaseModel):
+    scene_number: int
+    title: str
+    setting: str
+    time_of_day: str
+    location_name: str
+    duration_minutes: int
+    cast_names: List[str]
+    equipment_names: List[str] = []
+
+class ScriptExtractionResult(BaseModel):
+    scenes: List[ExtractedScene]
+    cast_members: List[ExtractedCast]
+    equipment: List[ExtractedEquipment] = []
+
+class ScriptCommitRequest(BaseModel):
+    scenes: List[ExtractedScene]
+    cast_members: List[ExtractedCast]
+    equipment: List[ExtractedEquipment] = []
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +251,7 @@ class ProjectUpdate(ProjectBase):
 
 class ProjectResponse(ProjectBase):
     id: str
-    owner_id: str
+    org_id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

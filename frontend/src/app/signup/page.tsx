@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 
-export default function LoginPage() {
+export default function SignupPage() {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('Producer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -11,30 +13,28 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
+    
     try {
-      const data = await apiClient.post('/api/auth/token', {
-        username: email,
-        password: password
+      const data = await apiClient.post('/api/auth/signup', {
+        email: email,
+        password: password,
+        name: name,
+        role: "owner"
       });
 
+      // signup returns the same token structure to auto-login
       sessionStorage.setItem('access_token', data.access_token);
-
+      
       setSuccess(true);
       setTimeout(() => {
-        // If the account was provisioned via invite token, force password change before entry
-        if (data.must_change_password) {
-          router.push('/change-password');
-        } else {
-          router.push('/');
-        }
+        router.push('/projects');
       }, 600);
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -55,12 +55,27 @@ export default function LoginPage() {
             <span className="material-symbols-outlined text-primary-container text-[32px]" style={{ fontVariationSettings: "'FILL' 1" }}>theaters</span>
           </div>
           <h1 className="font-headline-lg text-headline-lg text-on-surface tracking-tight">CineSched</h1>
-          <p className="font-label-md text-label-md text-on-surface-variant/60 uppercase tracking-[0.25em] mt-unit">Production Hub</p>
+          <p className="font-label-md text-label-md text-on-surface-variant/60 uppercase tracking-[0.25em] mt-unit">Create Account</p>
         </div>
 
-        {/* Login Card */}
+        {/* Signup Card */}
         <div className="bg-surface-container-low p-panel-padding rounded border border-outline-variant shadow-xl">
-          <form className="space-y-stack-md" onSubmit={handleLogin}>
+          <form className="space-y-stack-md" onSubmit={handleSignup}>
+            <div className="space-y-unit">
+              <label className="font-headline-md text-[13px] uppercase tracking-wider text-on-surface-variant block" htmlFor="name">Full Name</label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 text-[18px]">person</span>
+                <input required type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 pl-10 font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant/20 input-focus-ring transition-all duration-200" placeholder="Jane Doe" />
+              </div>
+            </div>
+
+            <div className="space-y-unit">
+              <label className="font-headline-md text-[13px] uppercase tracking-wider text-on-surface-variant block" htmlFor="role">Production House Name</label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40 text-[18px]">domain</span>
+                <input required type="text" id="role" value={role} onChange={(e) => setRole(e.target.value)} className="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 pl-10 font-body-md text-body-md text-on-surface input-focus-ring transition-all duration-200" placeholder="My Studio" />
+              </div>
+            </div>
             <div className="space-y-unit">
               <label className="font-headline-md text-[13px] uppercase tracking-wider text-on-surface-variant block" htmlFor="email">Email Address</label>
               <div className="relative">
@@ -89,11 +104,11 @@ export default function LoginPage() {
               }`}
             >
               {success ? (
-                <><span className="material-symbols-outlined align-middle mr-2 text-[20px]">check_circle</span> ACCESS GRANTED</>
+                <><span className="material-symbols-outlined align-middle mr-2 text-[20px]">check_circle</span> ACCOUNT CREATED</>
               ) : loading ? (
-                <><span className="material-symbols-outlined animate-spin text-[20px] mr-2 align-middle">sync</span> AUTHENTICATING...</>
+                <><span className="material-symbols-outlined animate-spin text-[20px] mr-2 align-middle">sync</span> REGISTERING...</>
               ) : (
-                'Sign In'
+                'Sign Up'
               )}
             </button>
             {error && (
@@ -104,10 +119,9 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-stack-lg pt-stack-md border-t border-outline-variant/30 flex flex-col gap-stack-sm items-center">
-            <a href="#" className="font-label-md text-label-md text-on-surface-variant hover:text-primary-container transition-colors">Forgot Password?</a>
             <div className="flex items-center gap-unit">
-              <span className="font-body-md text-body-md text-on-surface-variant/50">New to the studio?</span>
-              <a href="/signup" className="font-label-md text-label-md text-on-surface-variant hover:text-primary-container underline underline-offset-4 decoration-primary-container/30">Request Access</a>
+              <span className="font-body-md text-body-md text-on-surface-variant/50">Already have an account?</span>
+              <a href="/login" className="font-label-md text-label-md text-on-surface-variant hover:text-primary-container underline underline-offset-4 decoration-primary-container/30">Log In</a>
             </div>
           </div>
         </div>

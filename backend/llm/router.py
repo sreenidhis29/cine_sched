@@ -8,11 +8,16 @@ Routing logic:
      Pydantic, and retry up to MAX_REPAIR_RETRIES times with the parse error
      fed back to the model.
   4. If all retries fail, raise LLMRouterError (never a silent crash).
+  5. Implements local file caching, backoff retries on rate limits, and request throttling.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
+import hashlib
+import time
+import random
 from typing import Any, Dict, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -22,6 +27,12 @@ from llm import groq_client, gemini_client
 logger = logging.getLogger(__name__)
 
 MAX_REPAIR_RETRIES = 2
+MIN_REQUEST_INTERVAL = 1.0  # Minimum 1.0 second between consecutive LLM calls
+_last_request_time = 0.0
+
+# Setup local caching directory
+CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "llm_cache"))
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 
 class LLMRouterError(Exception):
@@ -30,6 +41,80 @@ class LLMRouterError(Exception):
 
 
 T = TypeVar("T", bound=BaseModel)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INTERNAL CACHE AND THROTTLING HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+def _calculate_key(
+    messages: List[Dict[str, str]],
+    system_prompt: str,
+    temperature: float,
+    max_tokens: int,
+    schema_name: Optional[str] = None
+) -> str:
+    payload = {
+        "messages": messages,
+        "system_prompt": system_prompt,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "schema_name": schema_name
+    }
+    serialized = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _get_cache(key: str) -> Optional[str]:
+    cache_file = os.path.join(CACHE_DIR, f"{key}.json")
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("response")
+        except Exception as e:
+            logger.warning("Failed to read LLM cache: %s", e)
+    return None
+
+
+def _set_cache(key: str, content: str) -> None:
+    cache_file = os.path.join(CACHE_DIR, f"{key}.json")
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump({"timestamp": time.time(), "response": content}, f, indent=2)
+    except Exception as e:
+        logger.warning("Failed to write LLM cache: %s", e)
+
+
+def _throttle() -> None:
+    global _last_request_time
+    now = time.time()
+    elapsed = now - _last_request_time
+    if elapsed < MIN_REQUEST_INTERVAL:
+        sleep_time = MIN_REQUEST_INTERVAL - elapsed
+        logger.info("Throttling LLM request: sleeping for %.2f seconds...", sleep_time)
+        time.sleep(sleep_time)
+    _last_request_time = time.time()
+
+
+def _call_with_backoff(func: Any, *args: Any, **kwargs: Any) -> Any:
+    max_retries = 3
+    base_delay = 2.0
+    for attempt in range(max_retries):
+        try:
+            _throttle()
+            return func(*args, **kwargs)
+        except Exception as e:
+            err_msg = str(e).lower()
+            is_rate_limit = any(term in err_msg for term in ["429", "rate limit", "resource exhausted", "limit exceeded"])
+            if is_rate_limit and attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt) + random.uniform(0.5, 1.5)
+                logger.warning(
+                    "Rate limit error encountered (%s). Retrying in %.2f seconds (attempt %d/%d)...",
+                    err_msg, delay, attempt + 1, max_retries
+                )
+                time.sleep(delay)
+            else:
+                raise e
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,16 +131,28 @@ def chat(
     Returns the assistant's text response.
     Raises LLMRouterError if both providers fail.
     """
+    cache_key = _calculate_key(messages, system_prompt, temperature, max_tokens)
+    cached = _get_cache(cache_key)
+    if cached is not None:
+        logger.info("LLM Router: Cache hit (chat) for key %s", cache_key)
+        return cached
+
+    logger.info("LLM Router: Cache miss (chat), calling API...")
+
+    groq_err = None
     try:
-        result = groq_client.chat(messages, system_prompt, temperature, max_tokens)
+        result = _call_with_backoff(groq_client.chat, messages, system_prompt, temperature, max_tokens)
         logger.debug("LLM router: used Groq (primary)")
+        _set_cache(cache_key, result)
         return result
-    except Exception as groq_err:
-        logger.warning("Groq failed (%s), falling back to Gemini", groq_err)
+    except Exception as e:
+        groq_err = e
+        logger.warning("Groq failed (%s), falling back to Gemini", e)
 
     try:
-        result = gemini_client.chat(messages, system_prompt, temperature, max_tokens)
+        result = _call_with_backoff(gemini_client.chat, messages, system_prompt, temperature, max_tokens)
         logger.debug("LLM router: used Gemini (fallback)")
+        _set_cache(cache_key, result)
         return result
     except Exception as gemini_err:
         raise LLMRouterError(
@@ -88,6 +185,19 @@ def structured_call(
         f"Do not include any explanation, markdown, or text outside the JSON object."
     )
 
+    schema_name = schema.__name__
+    cache_key = _calculate_key(messages, full_system, temperature, max_tokens, schema_name)
+    cached = _get_cache(cache_key)
+    if cached is not None:
+        logger.info("LLM Router: Cache hit (structured_call) for key %s", cache_key)
+        try:
+            data = _extract_json(cached)
+            return schema.model_validate(data)
+        except Exception as parse_err:
+            logger.warning("Cache parse/validation failed, invalidating and falling back to API: %s", parse_err)
+
+    logger.info("LLM Router: Cache miss (structured_call), calling API...")
+
     current_messages = list(messages)
     last_error: Optional[Exception] = None
 
@@ -96,7 +206,9 @@ def structured_call(
 
         try:
             data = _extract_json(raw)
-            return schema.model_validate(data)
+            validated = schema.model_validate(data)
+            _set_cache(cache_key, raw)  # Cache the raw validated JSON string
+            return validated
         except (json.JSONDecodeError, ValidationError, ValueError) as parse_err:
             last_error = parse_err
             if attempt < MAX_REPAIR_RETRIES:
@@ -131,15 +243,17 @@ def _raw_structured(
     max_tokens: int,
 ) -> str:
     """Try Groq structured, then Gemini structured."""
+    groq_err = None
     try:
-        result = groq_client.structured_chat(messages, system_prompt, temperature, max_tokens)
+        result = _call_with_backoff(groq_client.structured_chat, messages, system_prompt, temperature, max_tokens)
         logger.debug("LLM router structured: used Groq (primary)")
         return result
-    except Exception as groq_err:
-        logger.warning("Groq structured failed (%s), falling back to Gemini", groq_err)
+    except Exception as e:
+        groq_err = e
+        logger.warning("Groq structured failed (%s), falling back to Gemini", e)
 
     try:
-        result = gemini_client.structured_chat(messages, system_prompt, temperature, max_tokens)
+        result = _call_with_backoff(gemini_client.structured_chat, messages, system_prompt, temperature, max_tokens)
         logger.debug("LLM router structured: used Gemini (fallback)")
         return result
     except Exception as gemini_err:

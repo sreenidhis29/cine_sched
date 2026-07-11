@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/apiClient';
 
 type Trace = {
   id: string;
@@ -32,18 +33,12 @@ export default function TraceViewPage() {
 
     const fetchTraces = async () => {
       try {
-        const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/trace`);
-        if (runId) url.searchParams.append('run_id', runId);
+        let endpoint = `/api/projects/${projectId}/trace`;
+        if (runId) endpoint += `?run_id=${runId}`;
 
-        // We assume token is stored in localStorage or handled via fetch interceptor
-        const token = localStorage.getItem('access_token');
-        const res = await fetch(url.toString(), {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const data = await apiClient.get(endpoint);
 
-        if (!res.ok) throw new Error('Failed to fetch traces');
-        const data = await res.json();
-        setTraces(data.traces || []);
+        if (data) setTraces(data.traces || []);
       } catch (err: any) {
         setError(err.message);
       } finally {

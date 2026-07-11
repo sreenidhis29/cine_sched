@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 class Base(DeclarativeBase):
@@ -26,25 +27,94 @@ def _uuid():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ORGANIZATION & MEMBERS
+# ─────────────────────────────────────────────────────────────────────────────
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id              = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    name            = Column(String, nullable=False)
+    owner_user_id   = Column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    owner           = relationship("User", foreign_keys=[owner_user_id])
+    members         = relationship("OrgMember", back_populates="organization", cascade="all, delete-orphan")
+    projects        = relationship("Project", back_populates="organization", cascade="all, delete-orphan")
+
+
+class OrgMember(Base):
+    __tablename__ = "org_members"
+
+    id              = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    org_id          = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    user_id         = Column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    org_role        = Column(String, nullable=False)
+    status          = Column(String, default="active") # active, pending
+    invited_email   = Column(String, nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization    = relationship("Organization", back_populates="members")
+    user            = relationship("User")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USER
+# ─────────────────────────────────────────────────────────────────────────────
+class User(Base):
+    __tablename__ = "users"
+
+    id                   = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    email                = Column(String, unique=True, nullable=False)
+    name                 = Column(String, nullable=False, default="Unknown")
+    role                 = Column(String, nullable=False, default="Viewer")
+    hashed_password      = Column(String, nullable=False)
+    # When True, the user must set a new password on next login (used for invite tokens).
+    # Phase 5 note: once email dispatch exists, this will trigger an email prompt instead.
+    must_change_password = Column(Boolean, default=False, nullable=False)
+    created_at           = Column(DateTime(timezone=True), server_default=func.now())
+
+    def set_password(self, password: str):
+        self.hashed_password = generate_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        return check_password_hash(self.hashed_password, password)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PROJECT
 # ─────────────────────────────────────────────────────────────────────────────
 class Project(Base):
     __tablename__ = "projects"
 
     id          = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    org_id      = Column(UUID(as_uuid=False), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
     name        = Column(String, nullable=False)
     description = Column(Text)
-    owner_id    = Column(UUID(as_uuid=False), nullable=False)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # relationships
+    organization    = relationship("Organization", back_populates="projects")
+    project_members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
     locations       : List[Location]    = relationship("Location",    back_populates="project", cascade="all, delete-orphan")
     scenes          : List[Scene]       = relationship("Scene",       back_populates="project", cascade="all, delete-orphan")
     cast_members    : List[CastMember]  = relationship("CastMember",  back_populates="project", cascade="all, delete-orphan")
     equipment_items : List[Equipment]   = relationship("Equipment",   back_populates="project", cascade="all, delete-orphan")
     budget          : Optional[Budget]  = relationship("Budget",      back_populates="project", uselist=False, cascade="all, delete-orphan")
     schedules       : List[Schedule]    = relationship("Schedule",    back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+
+    id              = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    project_id      = Column(UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id         = Column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_role    = Column(String, nullable=True) # Overrides org_role if set
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    project         = relationship("Project", back_populates="project_members")
+    user            = relationship("User")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -76,6 +146,8 @@ class CastMember(Base):
 
     id                  = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     project_id          = Column(UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id             = Column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    linked_email        = Column(String, nullable=True)
     name                = Column(String, nullable=False)
     role                = Column(String)
     availability_start  = Column(Date)
@@ -83,6 +155,7 @@ class CastMember(Base):
     cost_per_day        = Column(Numeric(10, 2), default=0)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
+    user                = relationship("User")
     project : Project       = relationship("Project", back_populates="cast_members")
     scenes  : List[Scene]   = relationship("Scene", secondary="scene_cast", back_populates="cast_members")
 
@@ -126,7 +199,7 @@ class Scene(Base):
     location        : Optional[Location]= relationship("Location",   back_populates="scenes")
     cast_members    : List[CastMember]  = relationship("CastMember", secondary="scene_cast",      back_populates="scenes")
     equipment_items : List[Equipment]   = relationship("Equipment",  secondary="scene_equipment",  back_populates="scenes")
-    scene_equipment_links               = relationship("SceneEquipment", back_populates="scene",   cascade="all, delete-orphan")
+    scene_equipment_links               = relationship("SceneEquipment", back_populates="scene",   cascade="all, delete-orphan", overlaps="equipment_items,scenes")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -150,8 +223,8 @@ class SceneEquipment(Base):
     equipment_id        = Column(UUID(as_uuid=False), ForeignKey("equipment.id",  ondelete="CASCADE"), primary_key=True)
     quantity_required   = Column(Integer, default=1)
 
-    scene     : Scene     = relationship("Scene",     back_populates="scene_equipment_links")
-    equipment : Equipment = relationship("Equipment")
+    scene     : Scene     = relationship("Scene",     back_populates="scene_equipment_links", overlaps="equipment_items,scenes")
+    equipment : Equipment = relationship("Equipment", overlaps="equipment_items,scenes")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -190,7 +263,7 @@ class Schedule(Base):
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     project : Project               = relationship("Project",       back_populates="schedules")
-    entries : List[ScheduleEntry]   = relationship("ScheduleEntry", back_populates="schedule", cascade="all, delete-orphan")
+    entries = relationship("ScheduleEntry", back_populates="schedule", cascade="all, delete-orphan", uselist=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

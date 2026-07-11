@@ -36,19 +36,36 @@ router = APIRouter()
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("", response_model=List[ProjectResponse])
 def list_projects(
+    org_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    return db.query(Project).filter(Project.owner_id == user_id).all()
+    from db.models import OrgMember
+    # Get all projects from orgs where the user is an active member
+    org_ids = [m.org_id for m in db.query(OrgMember).filter(OrgMember.user_id == user_id, OrgMember.status == "active").all()]
+    
+    query = db.query(Project).filter(Project.org_id.in_(org_ids))
+    if org_id:
+        query = query.filter(Project.org_id == org_id)
+        
+    return query.all()
 
+
+class ProjectCreateOrg(ProjectCreate):
+    org_id: str
 
 @router.post("", response_model=ProjectResponse, status_code=201)
 def create_project(
-    body: ProjectCreate,
+    body: ProjectCreateOrg,
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    project = Project(id=str(uuid4()), name=body.name, description=body.description, owner_id=user_id)
+    from db.models import OrgMember
+    member = db.query(OrgMember).filter(OrgMember.org_id == body.org_id, OrgMember.user_id == user_id, OrgMember.status == "active").first()
+    if not member or member.org_role not in ["owner", "admin", "producer", "line_producer"]:
+        raise HTTPException(status_code=403, detail="Not authorized to create projects in this org")
+        
+    project = Project(id=str(uuid4()), name=body.name, description=body.description, org_id=body.org_id)
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -61,10 +78,7 @@ def get_project(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return p
+    return _require_project(project_id, user_id, db)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -74,9 +88,7 @@ def update_project(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
+    p = _require_project(project_id, user_id, db)
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
     db.commit()
@@ -90,9 +102,7 @@ def delete_project(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Project not found")
+    p = _require_project(project_id, user_id, db)
     db.delete(p)
     db.commit()
 
@@ -101,9 +111,14 @@ def delete_project(
 # LOCATION CRUD
 # ─────────────────────────────────────────────────────────────────────────────
 def _require_project(project_id: str, user_id: str, db: Session) -> Project:
-    p = db.query(Project).filter(Project.id == project_id, Project.owner_id == user_id).first()
+    p = db.query(Project).filter(Project.id == project_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
+        
+    from db.models import OrgMember
+    member = db.query(OrgMember).filter(OrgMember.org_id == p.org_id, OrgMember.user_id == user_id, OrgMember.status == "active").first()
+    if not member:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
     return p
 
 
@@ -155,10 +170,24 @@ def list_cast(project_id: str, db: Session = Depends(get_db), user_id: str = Dep
     return db.query(CastMember).filter(CastMember.project_id == project_id).all()
 
 
-@router.post("/{project_id}/cast", response_model=CastMemberResponse, status_code=201)
-def create_cast(project_id: str, body: CastMemberCreate, db: Session = Depends(get_db), user_id: str = Depends(get_current_user_id)):
+@router.post("/{project_id}/cast", response_model=CastMemberResponse)
+def add_cast_member(
+    project_id: str,
+    body: CastMemberCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     _require_project(project_id, user_id, db)
-    cm = CastMember(id=str(uuid4()), project_id=project_id, **body.model_dump())
+    
+    # Auto-link user_id if email exists
+    linked_user_id = None
+    if body.linked_email:
+        from db.models import User
+        user = db.query(User).filter(User.email == body.linked_email).first()
+        if user:
+            linked_user_id = user.id
+            
+    cm = CastMember(id=str(uuid4()), project_id=project_id, user_id=linked_user_id, **body.model_dump())
     db.add(cm)
     db.commit()
     db.refresh(cm)
@@ -166,13 +195,27 @@ def create_cast(project_id: str, body: CastMemberCreate, db: Session = Depends(g
 
 
 @router.patch("/{project_id}/cast/{cast_id}", response_model=CastMemberResponse)
-def update_cast(project_id: str, cast_id: str, body: CastMemberUpdate, db: Session = Depends(get_db), user_id: str = Depends(get_current_user_id)):
+def update_cast_member(
+    project_id: str,
+    cast_id: str,
+    body: CastMemberUpdate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     _require_project(project_id, user_id, db)
     cm = db.query(CastMember).filter(CastMember.id == cast_id, CastMember.project_id == project_id).first()
     if not cm:
         raise HTTPException(status_code=404, detail="Cast member not found")
+        
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(cm, k, v)
+        
+    # Check linked_email updates
+    if body.linked_email is not None:
+        from db.models import User
+        user = db.query(User).filter(User.email == body.linked_email).first()
+        cm.user_id = user.id if user else None
+        
     db.commit()
     db.refresh(cm)
     return cm
@@ -335,3 +378,70 @@ def upsert_budget(project_id: str, body: BudgetCreate, db: Session = Depends(get
     db.commit()
     db.refresh(b)
     return b
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROJECT-LEVEL ROLE OVERRIDE
+# ─────────────────────────────────────────────────────────────────────────────
+from pydantic import BaseModel as _BaseModel
+
+class ProjectRoleRequest(_BaseModel):
+    project_role: Optional[str]  # None clears the override
+
+
+@router.patch("/{project_id}/members/{target_user_id}/role")
+def set_project_role(
+    project_id: str,
+    target_user_id: str,
+    body: ProjectRoleRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """
+    Set (or clear) a project-specific role override for a user, separate from their org-wide role.
+    Example: an org-level "crew" member can be set as "dop" specifically on one project.
+    Restricted to org owners and admins.
+    """
+    from db.models import OrgMember, ProjectMember, Organization
+
+    proj = db.query(Project).filter(Project.id == project_id).first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Confirm requester is org owner/admin
+    requester_membership = db.query(OrgMember).filter(
+        OrgMember.org_id == proj.org_id,
+        OrgMember.user_id == user_id,
+        OrgMember.status == "active",
+    ).first()
+    if not requester_membership or requester_membership.org_role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only org owners and admins can set project roles")
+
+    # Confirm target user is an org member
+    target_membership = db.query(OrgMember).filter(
+        OrgMember.org_id == proj.org_id,
+        OrgMember.user_id == target_user_id,
+        OrgMember.status == "active",
+    ).first()
+    if not target_membership:
+        raise HTTPException(status_code=404, detail="Target user is not a member of this organization")
+
+    # Upsert ProjectMember row
+    pm = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.user_id == target_user_id,
+    ).first()
+
+    if pm:
+        pm.project_role = body.project_role
+    else:
+        pm = ProjectMember(
+            id=str(uuid4()),
+            project_id=project_id,
+            user_id=target_user_id,
+            project_role=body.project_role,
+        )
+        db.add(pm)
+
+    db.commit()
+    return {"status": "ok", "project_role": body.project_role}
