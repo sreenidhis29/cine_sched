@@ -133,11 +133,15 @@ class ExtractedScene(BaseModel):
     duration_minutes: int
     cast_names: List[str]
     equipment_names: List[str] = []
+    continuity_tags: List[str] = []
 
 class ScriptExtractionResult(BaseModel):
     scenes: List[ExtractedScene]
     cast_members: List[ExtractedCast]
     equipment: List[ExtractedEquipment] = []
+    # Phase 4: AI-suggested real-world places keyed by scene_number (as string).
+    # Suggestions only — never auto-committed. Review step required.
+    location_suggestions: dict = {}
 
 class ScriptCommitRequest(BaseModel):
     scenes: List[ExtractedScene]
@@ -183,6 +187,7 @@ class SceneBase(BaseModel):
     pages: float = 1.0
     duration_minutes: int = 60
     location_id: Optional[str] = None
+    continuity_tags: List[str] = []
 
 
 class SceneCreate(SceneBase):
@@ -287,9 +292,40 @@ class ScheduleResponse(BaseModel):
     relaxations: List[str] = []
     iteration_count: int
     entries: List[ScheduleEntryResponse] = []
+    extra_context: Optional[dict] = {}
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# APPROVALS (PHASE 5)
+# ─────────────────────────────────────────────────────────────────────────────
+class ApprovalResponse(BaseModel):
+    id: str
+    project_id: str
+    run_id: str
+    status: str
+    threshold_reason: str
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    
+    # Nested fields for UI convenience
+    approver_name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 4: LOCATION SUGGESTION
+# ─────────────────────────────────────────────────────────────────────────────
+class PlaceSuggestion(BaseModel):
+    """A real-world place candidate returned by the Nominatim geocoder."""
+    name: str
+    address: str
+    lat: float
+    lon: float
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -300,9 +336,11 @@ class SolverScene(BaseModel):
     scene_number: int
     title: str
     duration_minutes: int
+    setting: str = "INT"            # INT | EXT | INT/EXT — used by weather agent
     location_id: Optional[str] = None
     cast_member_ids: List[str] = []
     equipment_requirements: dict = {}   # equipment_id -> quantity_required
+    continuity_tags: List[str] = []     # Phase 4: continuity grouping labels
 
 
 class SolverCastMember(BaseModel):
@@ -319,6 +357,10 @@ class SolverLocation(BaseModel):
     availability_start: Optional[date] = None
     availability_end: Optional[date] = None
     cost_per_day: float = 0.0
+    # Phase 4: coordinates used by travel_agent (OSRM) and weather_agent (Open-Meteo)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
 
 
 class SolverEquipment(BaseModel):

@@ -84,4 +84,9 @@ def parser_agent(state: GraphState) -> GraphState:
         "reject_reason":         None,
         "final_explanation":     None,
         "current_schedule":      state.get("current_schedule"),
+        # Phase 4: advisory violation lists (reset each pipeline run)
+        "weather_violations":    [],
+        "travel_violations":     [],
+        "continuity_violations": [],
     }
+

@@ -102,6 +102,7 @@ class Project(Base):
     equipment_items : List[Equipment]   = relationship("Equipment",   back_populates="project", cascade="all, delete-orphan")
     budget          : Optional[Budget]  = relationship("Budget",      back_populates="project", uselist=False, cascade="all, delete-orphan")
     schedules       : List[Schedule]    = relationship("Schedule",    back_populates="project", cascade="all, delete-orphan")
+    approvals                           = relationship("Approval",    back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectMember(Base):
@@ -193,6 +194,10 @@ class Scene(Base):
     pages               = Column(Numeric(5, 2), default=1)
     duration_minutes    = Column(Integer, default=60)
     location_id         = Column(UUID(as_uuid=False), ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
+    # Phase 4: continuity tags — list of string labels shared across scenes that must
+    # look visually consistent (e.g. "sarah-wardrobe", "rain-wet-street").
+    # Scenes sharing a tag that end up far apart in the schedule get an advisory flag.
+    continuity_tags     = Column(JSON, default=list, nullable=False, server_default="'[]'")
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
     project         : Project           = relationship("Project",    back_populates="scenes")
@@ -260,7 +265,9 @@ class Schedule(Base):
     violations      = Column(JSON, default=list)
     relaxations     = Column(JSON, default=list)
     iteration_count = Column(Integer, default=0)
+    extra_context   = Column(JSON, default=dict)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
 
     project : Project               = relationship("Project",       back_populates="schedules")
     entries = relationship("ScheduleEntry", back_populates="schedule", cascade="all, delete-orphan", uselist=True)
@@ -283,6 +290,25 @@ class ScheduleEntry(Base):
 
     schedule : Schedule = relationship("Schedule", back_populates="entries")
     scene    : Scene    = relationship("Scene")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# APPROVALS (PHASE 5)
+# ─────────────────────────────────────────────────────────────────────────────
+class Approval(Base):
+    __tablename__ = "approvals"
+
+    id               = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    project_id       = Column(UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    run_id           = Column(UUID(as_uuid=False), nullable=False)
+    status           = Column(String, default="pending", nullable=False) # pending, approved, rejected
+    threshold_reason = Column(Text, nullable=False)
+    approved_by      = Column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at      = Column(DateTime(timezone=True), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+    project : Project = relationship("Project", back_populates="approvals")
+    approver: User    = relationship("User")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

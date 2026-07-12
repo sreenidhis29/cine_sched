@@ -8,6 +8,7 @@ from db.session import get_db
 from db.models import Scene, CastMember, Location, Project, scene_cast_table, Equipment, SceneEquipment
 from models.schemas import ScriptExtractionResult, ScriptCommitRequest
 from llm.router import structured_call, LLMRouterError
+from agents.location_suggestion_agent import suggest_locations_for_scenes
 
 try:
     from pypdf import PdfReader
@@ -85,11 +86,45 @@ async def parse_script(
             system_prompt="Extract structured scenes and cast from the script. Output valid JSON.",
             max_tokens=4000
         )
-        return extraction
     except LLMRouterError as e:
         raise HTTPException(status_code=500, detail=f"LLM extraction failed: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error parsing response: {str(e)}")
+
+    # Phase 4: Generate real-world location suggestions for scenes (review-gated, never auto-committed)
+    # Use the first geocoded project location as the shoot base for proximity search.
+    # If no geocoded locations exist, suggestions are skipped gracefully.
+    try:
+        existing_locs = db.query(Location).filter(Location.project_id == project_id).all()
+        existing_names = [loc.name for loc in existing_locs]
+
+        # Find first location with coordinates
+        shoot_base_lat = None
+        shoot_base_lon = None
+        for loc in existing_locs:
+            if loc.latitude is not None and loc.longitude is not None:
+                shoot_base_lat = float(loc.latitude)
+                shoot_base_lon = float(loc.longitude)
+                break
+
+        if shoot_base_lat is not None and shoot_base_lon is not None:
+            location_suggestions = suggest_locations_for_scenes(
+                scenes=extraction.scenes,
+                shoot_base_lat=shoot_base_lat,
+                shoot_base_lon=shoot_base_lon,
+                existing_location_names=existing_names,
+            )
+            # Convert int keys to strings for JSON serialization
+            extraction.location_suggestions = {
+                str(k): v for k, v in location_suggestions.items()
+            }
+        else:
+            print("DEBUG location_suggestion_agent: no geocoded locations found — skipping suggestions")
+    except Exception as e:
+        # Non-fatal: suggestions are advisory only
+        print(f"DEBUG location_suggestion_agent: error (non-fatal): {e}")
+
+    return extraction
 
 
 import secrets

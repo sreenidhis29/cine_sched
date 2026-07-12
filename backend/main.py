@@ -13,7 +13,8 @@ from api.auth import router as auth_router
 from api.projects import router as projects_router
 from api.schedule import router as schedule_router
 from api.organizations import router as organizations_router
-from api.callsheet_personal import router as callsheet_personal_router
+from api.callsheet import router as callsheet_router
+from api.calendar import router as calendar_router
 from api.script import router as script_router
 
 # ── Logging ────────────────────────────────────────────────────────────────
@@ -45,6 +46,42 @@ async def lifespan(app: FastAPI):
             conn.commit()
         except Exception:
             pass  # Column already exists or DB doesn't support IF NOT EXISTS — safe to ignore
+
+        # Phase 4: Add continuity_tags to scenes if not present
+        try:
+            conn.execute(text(
+                "ALTER TABLE scenes ADD COLUMN IF NOT EXISTS "
+                "continuity_tags JSON NOT NULL DEFAULT '[]'"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Already exists — safe to ignore
+
+        # Phase 4: Add latitude and longitude to locations if not present
+        try:
+            conn.execute(text(
+                "ALTER TABLE locations ADD COLUMN IF NOT EXISTS "
+                "latitude DOUBLE PRECISION"
+            ))
+            conn.execute(text(
+                "ALTER TABLE locations ADD COLUMN IF NOT EXISTS "
+                "longitude DOUBLE PRECISION"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Already exists — safe to ignore
+
+        # Phase 4: Add extra_context to schedules if not present
+        try:
+            conn.execute(text(
+                "ALTER TABLE schedules ADD COLUMN IF NOT EXISTS "
+                "extra_context JSON NOT NULL DEFAULT '{}'"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Already exists — safe to ignore
+
+
 
     # Database seeding & clean-up
     from db.session import SessionLocal
@@ -118,12 +155,13 @@ app.add_middleware(
 )
 
 # ── Routers ─────────────────────────────────────────────────────────────────
-app.include_router(auth_router,     prefix="/api/auth",     tags=["auth"])
-app.include_router(organizations_router, prefix="/api/organizations", tags=["organizations"])
-app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
-app.include_router(schedule_router, prefix="/api/projects", tags=["schedule"])
-app.include_router(callsheet_personal_router, prefix="/api", tags=["callsheet"])
-app.include_router(script_router)
+app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+app.include_router(organizations_router, prefix="/api/organizations", tags=["Organizations"])
+app.include_router(projects_router, prefix="/api/projects", tags=["Projects"])
+app.include_router(schedule_router, prefix="/api/projects", tags=["Schedule"])
+app.include_router(callsheet_router, prefix="/api/projects", tags=["Call Sheet"])
+app.include_router(calendar_router, prefix="/api/calendar", tags=["Calendar"])
+app.include_router(script_router, prefix="/api/projects", tags=["Script"])
 
 
 @app.get("/health")

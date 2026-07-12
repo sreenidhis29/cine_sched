@@ -91,6 +91,8 @@ export function Sidebar() {
   const projectNavItems = [
     { label: 'Constraints Editor', icon: 'edit_note', href: `/projects/${projectId}` },
     { label: 'Master Schedule', icon: 'calendar_month', href: `/projects/${projectId}/schedule` },
+    { label: 'Approvals', icon: 'fact_check', href: `/projects/${projectId}/approvals` },
+    { label: 'Project Team', icon: 'groups', href: `/projects/${projectId}/team` },
     { label: 'Resource Manager', icon: 'people', href: `/resources?projectId=${projectId}` },
     { label: 'Locations', icon: 'location_on', href: `/locations?projectId=${projectId}` },
     { label: 'Budget Monitor', icon: 'attach_money', href: `/budget?projectId=${projectId}` },

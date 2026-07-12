@@ -161,6 +161,37 @@ def delete_location(project_id: str, loc_id: str, db: Session = Depends(get_db),
     db.commit()
 
 
+@router.get("/{project_id}/locations/geocode", response_model=List[dict])
+def geocode_location(
+    project_id: str,
+    q: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    _require_project(project_id, user_id, db)
+    
+    # Try to find shoot base coordinates for biasing (if any location has coords)
+    locs = db.query(Location).filter(Location.project_id == project_id).all()
+    near_lat = None
+    near_lon = None
+    for loc in locs:
+        if loc.latitude is not None and loc.longitude is not None:
+            near_lat = float(loc.latitude)
+            near_lon = float(loc.longitude)
+            break
+            
+    from integrations.geocoding_client import geocode_query
+    results = geocode_query(q, near_lat=near_lat, near_lon=near_lon)
+    return [
+        {
+            "name": r.name,
+            "address": r.address,
+            "lat": r.lat,
+            "lon": r.lon
+        } for r in results
+    ]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CAST CRUD
 # ─────────────────────────────────────────────────────────────────────────────
@@ -445,3 +476,150 @@ def set_project_role(
 
     db.commit()
     return {"status": "ok", "project_role": body.project_role}
+
+
+@router.get("/{project_id}/members")
+def get_project_members(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    List members who have been explicitly added to this project (ProjectMember rows).
+    """
+    p = _require_project(project_id, user_id, db)
+    
+    from db.models import ProjectMember, User, OrgMember
+    project_members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
+    
+    # Enrich with user info and their underlying org role
+    results = []
+    for pm in project_members:
+        u = db.query(User).filter(User.id == pm.user_id).first()
+        om = db.query(OrgMember).filter(OrgMember.org_id == p.org_id, OrgMember.user_id == pm.user_id).first()
+        if u and om:
+            results.append({
+                "id": pm.id,
+                "project_id": pm.project_id,
+                "user_id": pm.user_id,
+                "project_role": pm.project_role,
+                "user_name": u.name,
+                "user_email": u.email,
+                "org_role": om.org_role
+            })
+            
+    return results
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 5: APPROVALS
+# ─────────────────────────────────────────────────────────────────────────────
+from models.schemas import ApprovalResponse
+from db.models import Approval, Schedule
+
+@router.get("/{project_id}/approvals", response_model=List[ApprovalResponse])
+def list_approvals(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    _require_project(project_id, user_id, db)
+    approvals = db.query(Approval).filter(Approval.project_id == project_id).order_by(Approval.created_at.desc()).all()
+    # Add approver name for UI convenience
+    for a in approvals:
+        if a.approver:
+            a.approver_name = a.approver.name
+    return approvals
+
+
+@router.post("/{project_id}/approve/{run_id}", response_model=ApprovalResponse)
+def approve_schedule(
+    project_id: str,
+    run_id: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    from datetime import datetime, timezone
+    
+    p = _require_project(project_id, user_id, db)
+    # Check permissions
+    from db.models import OrgMember, ProjectMember
+    # Get project override or org role
+    pm = db.query(ProjectMember).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == user_id).first()
+    om = db.query(OrgMember).filter(OrgMember.org_id == p.org_id, OrgMember.user_id == user_id, OrgMember.status == "active").first()
+    
+    role = pm.project_role if (pm and pm.project_role) else (om.org_role if om else None)
+    if role not in ["owner", "admin", "producer", "line_producer"]:
+        raise HTTPException(status_code=403, detail="Not authorized to approve schedules")
+
+    approval = db.query(Approval).filter(Approval.project_id == project_id, Approval.run_id == run_id).first()
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+
+    if approval.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Approval is already {approval.status}")
+
+    # Mark as approved
+    approval.status = "approved"
+    approval.approved_by = user_id
+    approval.approved_at = datetime.now(timezone.utc)
+
+    # Mark schedule as accepted
+    schedule = db.query(Schedule).filter(Schedule.project_id == project_id, Schedule.run_id == run_id).first()
+    if schedule:
+        schedule.is_accepted = True
+
+    db.commit()
+    db.refresh(approval)
+    
+    if approval.approver:
+        approval.approver_name = approval.approver.name
+        
+    # Phase 5: Trigger schedule finalized email to the person who approved it
+    from integrations.notifications import send_schedule_finalized_email
+    from db.models import User
+    from config import settings
+    u = db.query(User).filter(User.id == user_id).first()
+    if u:
+        schedule_link = f"{settings.FRONTEND_URL}/projects/{project_id}/schedule"
+        send_schedule_finalized_email(u.email, p.name, schedule_link)
+        
+    return approval
+
+
+@router.post("/{project_id}/reject/{run_id}", response_model=ApprovalResponse)
+def reject_schedule(
+    project_id: str,
+    run_id: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    from datetime import datetime, timezone
+    
+    p = _require_project(project_id, user_id, db)
+    # Check permissions
+    from db.models import OrgMember, ProjectMember
+    pm = db.query(ProjectMember).filter(ProjectMember.project_id == project_id, ProjectMember.user_id == user_id).first()
+    om = db.query(OrgMember).filter(OrgMember.org_id == p.org_id, OrgMember.user_id == user_id, OrgMember.status == "active").first()
+    
+    role = pm.project_role if (pm and pm.project_role) else (om.org_role if om else None)
+    if role not in ["owner", "admin", "producer", "line_producer"]:
+        raise HTTPException(status_code=403, detail="Not authorized to reject schedules")
+
+    approval = db.query(Approval).filter(Approval.project_id == project_id, Approval.run_id == run_id).first()
+    if not approval:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+
+    if approval.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Approval is already {approval.status}")
+
+    approval.status = "rejected"
+    approval.approved_by = user_id
+    approval.approved_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(approval)
+    
+    if approval.approver:
+        approval.approver_name = approval.approver.name
+        
+    return approval

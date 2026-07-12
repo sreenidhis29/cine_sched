@@ -1,15 +1,21 @@
 """
 Critic agent — the decision maker in the replan loop.
 
+Phase 4 update: distinguishes HARD violations (trigger replanning) from
+SOFT/ADVISORY violations (weather, travel, continuity — informational only).
+
 Logic:
-1. Collect all violations from availability, conflict, and budget agents.
-2. If no violations → set accepted=True, route to explainer.
-3. If violations exist AND iteration_count < MAX_ITERATIONS (4):
+1. Collect HARD violations from availability, conflict, and budget agents.
+2. Collect SOFT (advisory) violations from weather, travel, and continuity agents.
+3. If no HARD violations → set accepted=True, route to explainer.
+   Advisory violations are passed through to the explainer for inclusion in
+   the final explanation, but they do NOT block acceptance.
+4. If HARD violations exist AND iteration_count < MAX_ITERATIONS (4):
    - Use the LLM router to decide which constraint to relax.
    - Update relaxed_constraints in state.
    - Increment iteration_count.
    - Route back to scheduler_agent (handled by graph conditional edge).
-4. If at the cap → accepted=False, set reject_reason with a clear message.
+5. If at the cap → accepted=False, set reject_reason with a clear message.
 """
 from __future__ import annotations
 
@@ -56,36 +62,73 @@ def critic_agent(state: GraphState) -> GraphState:
     """
     Aggregate violations, decide whether to accept or replan, and
     optionally choose a constraint relaxation via the LLM router.
+
+    Phase 4: Advisory violations (weather, travel, continuity) are collected
+    but do NOT influence the accept/replan decision — they flow to the explainer.
     """
     with Timer() as t:
-        # ── Collect all violations ─────────────────────────────────────────────
-        all_violations: List[str] = []
+        # ── Collect HARD violations (trigger replanning) ────────────────────
+        hard_violations: List[str] = []
 
-    solver_infeasible = (
-        state.get("current_schedule") is None
-        or not state.get("current_schedule").feasible
-    )
-    if solver_infeasible:
-        all_violations.extend(state.get("violations", []))
+        solver_infeasible = (
+            state.get("current_schedule") is None
+            or not state.get("current_schedule").feasible
+        )
+        if solver_infeasible:
+            hard_violations.extend(state.get("violations", []))
 
-    all_violations.extend(state.get("availability_violations", []))
-    all_violations.extend(state.get("conflict_violations", []))
-    all_violations.extend(state.get("budget_violations", []))
+        hard_violations.extend(state.get("availability_violations", []))
+        hard_violations.extend(state.get("conflict_violations", []))
+        hard_violations.extend(state.get("budget_violations", []))
+
+        # ── Collect SOFT (advisory) violations — informational only ─────────
+        # These NEVER trigger replanning. They will be included in the explanation.
+        advisory_violations: List[str] = []
+        advisory_violations.extend(state.get("weather_violations", []))
+        advisory_violations.extend(state.get("travel_violations", []))
+        advisory_violations.extend(state.get("continuity_violations", []))
 
     iteration = state.get("iteration_count", 0)
 
     logger.info(
-        "critic_agent: iteration=%d, violations=%d, solver_feasible=%s",
-        iteration, len(all_violations), not solver_infeasible
+        "critic_agent: iteration=%d, hard_violations=%d, advisory_violations=%d, solver_feasible=%s",
+        iteration, len(hard_violations), len(advisory_violations), not solver_infeasible,
     )
 
-    # ── No violations → accept ─────────────────────────────────────────────
-    if not all_violations:
-        logger.info("critic_agent: no violations — accepting schedule")
+    # ── No HARD violations → accept (advisory violations included in explanation) ──
+    if not hard_violations:
+        # Phase 5: Check for human-in-the-loop approval thresholds
+        relaxed_constraints = state.get("relaxed_constraints", [])
+        total_cost = state.get("total_cost", 0.0)
+        budget = state.get("budget")
+        budget_limit = budget.total_limit if budget else 0.0
+
+        pending_approval = False
+        threshold_reason = None
+
+        if len(relaxed_constraints) > 0:
+            pending_approval = True
+            threshold_reason = f"Relaxed hard constraints to achieve feasibility: {', '.join(relaxed_constraints)}"
+        elif budget_limit > 0 and total_cost > (budget_limit * 1.05):
+            pending_approval = True
+            threshold_reason = f"Total cost (${total_cost:,.2f}) exceeds budget limit (${budget_limit:,.2f}) by more than 5%."
+
+        if pending_approval:
+            logger.info("critic_agent: schedule feasible but requires approval. Reason: %s", threshold_reason)
+        elif advisory_violations:
+            logger.info(
+                "critic_agent: no hard violations — accepting. %d advisory violation(s) noted.",
+                len(advisory_violations),
+            )
+        else:
+            logger.info("critic_agent: no violations — accepting schedule")
+        
         return {
             **state,
-            "accepted": True,
-            "violations": [],
+            "accepted": True if not pending_approval else False,  # Technically it's "finished" with graph, but not accepted
+            "pending_approval": pending_approval,
+            "threshold_reason": threshold_reason,
+            "violations": advisory_violations,   # pass advisories to explainer
             "reject_reason": None,
         }
 
@@ -94,17 +137,22 @@ def critic_agent(state: GraphState) -> GraphState:
         reason = (
             f"Schedule could not be made feasible after {MAX_ITERATIONS} attempts. "
             f"Remaining violations:\n"
-            + "\n".join(f"  • {v}" for v in all_violations)
+            + "\n".join(f"  • {v}" for v in hard_violations)
         )
+        if advisory_violations:
+            reason += (
+                f"\n\nAdvisory notices (non-blocking):\n"
+                + "\n".join(f"  ℹ {v}" for v in advisory_violations)
+            )
         logger.warning("critic_agent: cap reached — rejecting. %s", reason)
-        
+
         if state.get("project_id") and state.get("run_id"):
             write_trace(
                 project_id=state["project_id"],
                 run_id=state["run_id"],
                 agent_name="Critic Agent",
-                input_summary=f"Iteration {iteration}/{MAX_ITERATIONS}. Found {len(all_violations)} violations.",
-                output_summary=f"Max iterations reached. Giving up.",
+                input_summary=f"Iteration {iteration}/{MAX_ITERATIONS}. Found {len(hard_violations)} hard violations.",
+                output_summary="Max iterations reached. Giving up.",
                 tool_calls=[],
                 duration_ms=t.duration_ms,
                 confidence="low"
@@ -114,10 +162,10 @@ def critic_agent(state: GraphState) -> GraphState:
             **state,
             "accepted": False,
             "reject_reason": reason,
-            "violations": all_violations,
+            "violations": hard_violations + advisory_violations,
         }
 
-    # ── Ask LLM which constraint to relax ─────────────────────────────────
+    # ── Ask LLM which HARD constraint to relax ────────────────────────────
     already_relaxed = state.get("relaxed_constraints", [])
     scenes    = state.get("scenes", [])
     cast      = state.get("cast", [])
@@ -137,8 +185,11 @@ def critic_agent(state: GraphState) -> GraphState:
     memory_info = json.dumps(past_memory, indent=2) if past_memory else "No past decisions available."
 
     user_message = f"""
-Current violations (iteration {iteration + 1}):
-{chr(10).join(f'  - {v}' for v in all_violations)}
+Current HARD violations (iteration {iteration + 1}):
+{chr(10).join(f'  - {v}' for v in hard_violations)}
+
+Advisory violations (informational — do NOT factor into relaxation decision):
+{chr(10).join(f'  ℹ {v}' for v in advisory_violations) if advisory_violations else '  (none)'}
 
 Already relaxed constraints (do NOT re-relax these):
 {already_relaxed if already_relaxed else '  (none yet)'}
@@ -167,12 +218,12 @@ Choose exactly ONE constraint to relax to make the schedule feasible.
             new_relaxation, decision.rationale
         )
         new_relaxed = list(set(already_relaxed + [new_relaxation]))
-        
+
         if state.get("project_id"):
             write_agent_memory(
                 project_id=state["project_id"],
                 decision_type="constraint_relaxation",
-                context={"violations": all_violations, "iteration": iteration},
+                context={"violations": hard_violations, "iteration": iteration},
                 outcome=new_relaxation
             )
 
@@ -181,7 +232,7 @@ Choose exactly ONE constraint to relax to make the schedule feasible.
                 project_id=state["project_id"],
                 run_id=state["run_id"],
                 agent_name="Critic Agent",
-                input_summary=f"Iteration {iteration+1}. Violations: {len(all_violations)}. Past memory: {len(past_memory)} entries.",
+                input_summary=f"Iteration {iteration+1}. Hard violations: {len(hard_violations)}. Advisory: {len(advisory_violations)}. Past memory: {len(past_memory)} entries.",
                 output_summary=f"Decided to relax: {new_relaxation}. Rationale: {decision.rationale}",
                 tool_calls=[{"tool": "structured_call", "args": {"schema": "RelaxationDecision"}}],
                 duration_ms=t.duration_ms,
@@ -192,18 +243,18 @@ Choose exactly ONE constraint to relax to make the schedule feasible.
             **state,
             "relaxed_constraints": new_relaxed,
             "iteration_count": iteration + 1,
-            "violations": all_violations,
+            "violations": hard_violations + advisory_violations,
             "accepted": False,
         }
     except LLMRouterError as e:
         logger.error("critic_agent: LLM failed, cannot choose relaxation: %s", e)
-        
+
         if state.get("project_id") and state.get("run_id"):
             write_trace(
                 project_id=state["project_id"],
                 run_id=state["run_id"],
                 agent_name="Critic Agent",
-                input_summary=f"Attempting to decide relaxation via LLM.",
+                input_summary="Attempting to decide relaxation via LLM.",
                 output_summary=f"LLM Error: {e}",
                 tool_calls=[],
                 duration_ms=t.duration_ms,
@@ -214,5 +265,5 @@ Choose exactly ONE constraint to relax to make the schedule feasible.
             **state,
             "accepted": False,
             "reject_reason": f"LLM unavailable for constraint relaxation: {e}",
-            "violations": all_violations,
+            "violations": hard_violations + advisory_violations,
         }

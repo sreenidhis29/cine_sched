@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
+import { WeatherBadge, WeatherForecastStrip } from '@/components/ui/WeatherBadge';
+
 
 export default function ScheduleViewPage() {
   const params = useParams();
@@ -16,6 +18,8 @@ export default function ScheduleViewPage() {
   const [scenes, setScenes] = useState<any[]>([]);
   const [budget, setBudget] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  // Phase 4: weather forecast data (keyed by shoot_day string)
+  const [dayForecasts, setDayForecasts] = useState<Record<string, any>>({});
   
   // What-If State
   const [chatMessage, setChatMessage] = useState('');
@@ -48,7 +52,15 @@ export default function ScheduleViewPage() {
 
       try {
         const scheduleData = await apiClient.get(`/api/projects/${projectId}/schedule`);
-        if (scheduleData) setSchedule(scheduleData);
+        if (scheduleData) {
+          setSchedule(scheduleData);
+          // Phase 4: extract day_forecasts from the extra_context if stored
+          // (The backend attaches these via the weather_agent state.)
+          // For now we parse them from the schedule's violations advisory strings
+          // and also check for a dedicated forecast endpoint in future phases.
+          const forecasts = scheduleData?.extra_context?.day_forecasts || {};
+          setDayForecasts(forecasts);
+        }
       } catch (e) {
         console.error("Failed to load schedule (might not exist yet):", e);
       }
@@ -91,7 +103,10 @@ export default function ScheduleViewPage() {
       const day = entry.shoot_day;
       if (!daysMap.has(day)) {
         daysMap.set(day, {
-          date: `DAY ${day}`, // or shoot_date if available
+          day,
+          date: entry.shoot_date ? entry.shoot_date : `DAY ${day}`,
+          label: `DAY ${day}`,
+          forecast: dayForecasts[String(day)] || null,
           scenes: []
         });
       }
@@ -103,13 +118,21 @@ export default function ScheduleViewPage() {
         type: sceneData ? sceneData.setting : 'UNK',
         title: sceneData ? sceneData.title : 'Unknown Scene',
         time: `${entry.start_time?.substring(0,5) || '??:??'} - ${entry.end_time?.substring(0,5) || '??:??'}`,
-        cast: 'Multiple', // Mock for now, would need to fetch cast relations
-        status: schedule.violations.some((v: string) => v.includes(entry.scene_id)) ? 'conflict' : 'completed'
+        cast: 'Multiple',
+        status: schedule.violations.some((v: string) => !v.startsWith('[') && v.includes(entry.scene_id)) ? 'conflict' : 'completed'
       });
     });
     
-    return Array.from(daysMap.values()).sort((a, b) => parseInt(a.date.split(' ')[1]) - parseInt(b.date.split(' ')[1]));
-  }, [schedule, scenes]);
+    return Array.from(daysMap.values()).sort((a, b) => a.day - b.day);
+  }, [schedule, scenes, dayForecasts]);
+
+  // Phase 4: Split violations into hard conflicts vs advisories
+  const { hardViolations, advisoryViolations } = React.useMemo(() => {
+    const violations: string[] = schedule?.violations || [];
+    const hard = violations.filter((v: string) => !v.startsWith('[WEATHER') && !v.startsWith('[TRAVEL') && !v.startsWith('[CONTINUITY'));
+    const advisory = violations.filter((v: string) => v.startsWith('[WEATHER') || v.startsWith('[TRAVEL') || v.startsWith('[CONTINUITY'));
+    return { hardViolations: hard, advisoryViolations: advisory };
+  }, [schedule]);
 
   const satisfactionScore = schedule?.is_feasible ? 100 : Math.max(0, 100 - (schedule?.violations?.length || 0) * 10);
 
@@ -135,14 +158,43 @@ export default function ScheduleViewPage() {
             <div className="flex flex-wrap gap-3 flex-shrink-0">
               <Link href={`/projects/${projectId}/trace`} className="flex items-center gap-2 border border-primary-container text-primary-container hover:bg-primary-container/10 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs">
                 <span className="material-symbols-outlined text-[16px]">psychology</span>
-                View Reasoning Trace
+                View Trace
               </Link>
-              <button className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs">
+              <button 
+                onClick={async () => {
+                  try {
+                    const res = await apiClient.post(`/api/calendar/${projectId}/sync`, {});
+                    alert(`Successfully synced! Created ${res.events_created} events.`);
+                  } catch (e: any) {
+                    if (e.message?.includes('401')) {
+                      const res = await apiClient.get('/api/calendar/auth');
+                      if (res && res.auth_url) window.location.href = res.auth_url;
+                    } else {
+                      alert('Failed to sync calendar: ' + e.message);
+                    }
+                  }
+                }}
+                className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs"
+              >
+                <span className="material-symbols-outlined text-[16px]">calendar_add_on</span>
+                Sync Calendar
+              </button>
+              <button 
+                onClick={() => {
+                  window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/1`, '_blank');
+                }}
+                className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs"
+              >
                 <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
-                Export
+                Call Sheet (Day 1)
               </button>
             </div>
           </div>
+
+          {/* Weather Forecast Strip — Phase 4 */}
+          {Object.keys(dayForecasts).length > 0 && (
+            <WeatherForecastStrip dayForecasts={dayForecasts} />
+          )}
 
           {/* Timeline Grid */}
           <div className="flex-1 overflow-y-auto pr-2 space-y-stack-lg custom-scrollbar">
@@ -153,9 +205,34 @@ export default function ScheduleViewPage() {
             ) : (
               scheduleDays.map((day, i) => (
                 <div key={i}>
-                  <h3 className="font-label-md text-[14px] uppercase tracking-wider text-on-surface-variant border-b border-outline-variant/30 pb-2 mb-4 sticky top-0 bg-background/90 backdrop-blur-sm z-10">
-                    {day.date}
-                  </h3>
+                  <div className="flex items-center gap-3 border-b border-outline-variant/30 pb-2 mb-4 sticky top-0 bg-background/90 backdrop-blur-sm z-10">
+                    <h3 className="font-label-md text-[14px] uppercase tracking-wider text-on-surface-variant">
+                      {day.label}
+                    </h3>
+                    {day.date && day.date !== day.label && (
+                      <span className="text-[11px] text-on-surface-variant/60">{day.date}</span>
+                    )}
+                    {/* Phase 4: Per-day weather badge */}
+                    {day.forecast && (
+                      <WeatherBadge
+                        date={day.forecast.date}
+                        precipMm={day.forecast.precipitation_sum_mm}
+                        weatherCode={day.forecast.weather_code}
+                        windSpeedKmh={day.forecast.wind_speed_max_kmh}
+                        isHighRisk={day.forecast.is_high_risk}
+                        compact
+                      />
+                    )}
+                    <button 
+                      onClick={() => {
+                        window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/${day.day}`, '_blank');
+                      }}
+                      className="ml-auto flex items-center gap-1.5 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-2 py-1 rounded font-label-md uppercase tracking-wider font-bold transition-all text-[10px]"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">picture_as_pdf</span>
+                      Call Sheet
+                    </button>
+                  </div>
                   <div className="space-y-unit">
                     {day.scenes.map((scene: any, j: number) => (
                       <div 
@@ -258,7 +335,8 @@ export default function ScheduleViewPage() {
                 <p>
                   The current schedule achieves <strong className="text-white">{satisfactionScore}% constraint satisfaction</strong>.
                 </p>
-                {schedule.violations?.map((v: string, i: number) => (
+                {/* Hard violations — blocks scheduling */}
+                {hardViolations.map((v: string, i: number) => (
                   <div key={i} className="bg-error-container/20 border border-error-container p-3 rounded text-error-container text-xs">
                     <div className="font-bold flex items-center gap-1 mb-1">
                       <span className="material-symbols-outlined text-[16px]">warning</span> Conflict Detected
@@ -266,6 +344,27 @@ export default function ScheduleViewPage() {
                     {v}
                   </div>
                 ))}
+                {/* Phase 4: Advisory violations — informational only */}
+                {advisoryViolations.map((v: string, i: number) => {
+                  const isWeather = v.startsWith('[WEATHER');
+                  const isTravel = v.startsWith('[TRAVEL');
+                  const icon = isWeather ? '🌧️' : isTravel ? '🚗' : '🎬';
+                  return (
+                    <div key={`adv-${i}`} style={{
+                      backgroundColor: 'rgba(234, 88, 12, 0.08)',
+                      border: '1px solid rgba(234, 88, 12, 0.25)',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      fontSize: '11px',
+                      color: '#c2683a',
+                    }}>
+                      <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                        <span>{icon}</span> Advisory
+                      </div>
+                      {v.replace(/^\[[A-Z ]+\] /, '')}
+                    </div>
+                  );
+                })}
                 {schedule.relaxations?.map((r: string, i: number) => (
                   <div key={i} className="bg-surface-bright border border-outline-variant p-3 rounded text-on-surface-variant text-xs">
                     <div className="font-bold flex items-center gap-1 mb-1">

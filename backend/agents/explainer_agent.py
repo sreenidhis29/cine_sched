@@ -83,6 +83,9 @@ def explainer_agent(state: GraphState) -> GraphState:
         if budget else f"Total cost: ${total_cost:,.2f}"
     )
 
+    pending_approval = state.get("pending_approval", False)
+    threshold_reason = state.get("threshold_reason")
+
     if not accepted and reject_reason:
         prompt = (
             f"The scheduling pipeline was unable to find an acceptable schedule.\n\n"
@@ -92,6 +95,15 @@ def explainer_agent(state: GraphState) -> GraphState:
             f"{budget_text}\n\n"
             f"Please explain this situation sympathetically and suggest what the production "
             f"team might do next (e.g., negotiate cast availability, adjust budget, reduce scope)."
+        )
+    elif pending_approval:
+        prompt = (
+            f"The scheduling pipeline has found a feasible schedule, but it requires manual approval.\n\n"
+            f"Reason for pending approval: {threshold_reason}\n\n"
+            f"{schedule_text}\n\n"
+            f"{relaxation_text}\n\n"
+            f"{budget_text}\n\n"
+            f"Please provide a clear, encouraging explanation of this schedule and explicitly state that it requires manual approval by the producer."
         )
     else:
         prompt = (

@@ -38,6 +38,25 @@ export default function ProjectEditorPage() {
   const [costFilter, setCostFilter] = useState('ALL');
   const [qtyFilter, setQtyFilter] = useState('ALL');
 
+  // Geocoding State
+  const [geocodeResults, setGeocodeResults] = useState<any[]>([]);
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeQueryStr, setGeocodeQueryStr] = useState('');
+
+  const handleGeocodeSearch = async () => {
+    if (!geocodeQueryStr.trim()) return;
+    setGeocoding(true);
+    setGeocodeResults([]);
+    try {
+      const results = await apiClient.get(`/api/projects/${projectId}/locations/geocode?q=${encodeURIComponent(geocodeQueryStr)}`);
+      setGeocodeResults(results || []);
+    } catch (e) {
+      console.error("Geocoding failed:", e);
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
   const getSingularTab = () => {
     if (activeTab === 'Scenes') return 'Scene';
     if (activeTab === 'Cast') return 'Cast Member';
@@ -133,12 +152,20 @@ export default function ProjectEditorPage() {
     } else {
       setFormData(item);
     }
+    if (activeTab === 'Locations') {
+      setGeocodeQueryStr(item.address || item.name || '');
+      setGeocodeResults([]);
+    }
     setModalOpen(true);
   };
 
   const handleAdd = () => {
     setEditingItem(null);
     setFormData(activeTab === 'Scenes' ? { cast_member_ids: [], equipment_ids: [] } : {});
+    if (activeTab === 'Locations') {
+      setGeocodeQueryStr('');
+      setGeocodeResults([]);
+    }
     setModalOpen(true);
   };
 
@@ -253,6 +280,8 @@ export default function ProjectEditorPage() {
     if (activeTab === 'Locations') {
       return [
         { header: 'Name', accessorKey: 'name' },
+        { header: 'Address', accessorKey: 'address', cell: (row: any) => row.address || <span className="text-on-surface-variant/40 italic">Not Geocoded</span> },
+        { header: 'Coordinates', cell: (row: any) => row.latitude !== null && row.longitude !== null ? `${row.latitude.toFixed(4)}, ${row.longitude.toFixed(4)}` : <span className="text-on-surface-variant/40 italic">None</span> },
         { header: 'Cost/Day', accessorKey: 'cost_per_day', isNumeric: true },
         actions
       ];
@@ -546,8 +575,102 @@ export default function ProjectEditorPage() {
             )}
             {activeTab === 'Locations' && (
               <>
-                <Input label="Name" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
-                <Input label="Cost Per Day" type="number" value={formData.cost_per_day || ''} onChange={(e) => setFormData({...formData, cost_per_day: parseFloat(e.target.value)})} />
+                <Input label="Location Name (e.g. Studio A, Coffee Shop)" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
+                <Input label="Cost Per Day ($)" type="number" value={formData.cost_per_day || ''} onChange={(e) => setFormData({...formData, cost_per_day: parseFloat(e.target.value)})} />
+                
+                <div className="border border-outline-variant/30 rounded p-3 bg-surface-container/20 mt-4 space-y-3">
+                  <div className="text-xs font-bold text-primary-container uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px]">location_on</span>
+                    Geocoding & Address (OSM Nominatim)
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    Search for a real-world address to automatically retrieve coordinates. Coordinates are required for weather risk and travel distance evaluations.
+                  </p>
+                  
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Search address (e.g. Times Square, NY)"
+                        value={geocodeQueryStr}
+                        onChange={(e) => setGeocodeQueryStr(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleGeocodeSearch();
+                          }
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGeocodeSearch}
+                      disabled={geocoding || !geocodeQueryStr.trim()}
+                      className="px-3.5 bg-secondary-container hover:bg-secondary-container/80 text-accent font-bold text-xs uppercase tracking-wider rounded border border-accent/20 flex items-center gap-1 transition-colors self-end h-[36px]"
+                    >
+                      {geocoding ? (
+                        <>
+                          <span className="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                          Searching
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[16px]">search</span>
+                          Search
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {geocodeResults.length > 0 && (
+                    <div className="max-h-[160px] overflow-y-auto border border-outline-variant/30 rounded bg-background/50 divide-y divide-outline-variant/30 custom-scrollbar">
+                      {geocodeResults.map((r, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              address: r.address,
+                              latitude: r.lat,
+                              longitude: r.lon,
+                            });
+                            setGeocodeResults([]);
+                          }}
+                          className="w-full text-left p-2 hover:bg-surface-variant/30 transition-colors flex flex-col gap-0.5 text-xs text-on-surface-variant"
+                        >
+                          <span className="font-bold text-on-surface text-[12px]">{r.name}</span>
+                          <span className="text-[11px] opacity-80 truncate">{r.address}</span>
+                          <span className="text-[10px] opacity-50 font-mono">{r.lat.toFixed(4)}, {r.lon.toFixed(4)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/20">
+                    <Input
+                      label="Latitude"
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 40.7580"
+                      value={formData.latitude !== undefined && formData.latitude !== null ? formData.latitude : ''}
+                      onChange={(e) => setFormData({...formData, latitude: e.target.value ? parseFloat(e.target.value) : null})}
+                    />
+                    <Input
+                      label="Longitude"
+                      type="number"
+                      step="any"
+                      placeholder="e.g. -73.9855"
+                      value={formData.longitude !== undefined && formData.longitude !== null ? formData.longitude : ''}
+                      onChange={(e) => setFormData({...formData, longitude: e.target.value ? parseFloat(e.target.value) : null})}
+                    />
+                  </div>
+                  <Input
+                    label="Resolved Address"
+                    value={formData.address || ''}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
+                    placeholder="Auto-filled or custom address"
+                  />
+                </div>
               </>
             )}
             {activeTab === 'Equipment' && (

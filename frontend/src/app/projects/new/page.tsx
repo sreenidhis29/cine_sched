@@ -21,8 +21,10 @@ export default function NewProjectWizard() {
   const [file, setFile] = useState<File | null>(null);
   
   // Step 3: Review
-  const [parsedData, setParsedData] = useState<{ scenes: any[], cast_members: any[], equipment: any[] } | null>(null);
+  const [parsedData, setParsedData] = useState<{ scenes: any[], cast_members: any[], equipment: any[], location_suggestions?: Record<string, any[]> } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
+  // Phase 4: which scene number is showing suggestion details
+  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null);
 
   // Cast member draft records — returned after commit (no accounts yet)
   const [castDrafts, setCastDrafts] = useState<any[]>([]);
@@ -522,6 +524,117 @@ export default function NewProjectWizard() {
                 </table>
               </div>
             </Card>
+
+            {/* Phase 4: Location Suggestions Panel — advisory only, review-gated */}
+            {parsedData.location_suggestions && Object.keys(parsedData.location_suggestions).length > 0 && (
+              <Card className="p-6">
+                <h2 className="font-headline-md text-on-surface mb-2 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary-container">location_on</span>
+                  AI Location Suggestions
+                  <span style={{
+                    fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '10px',
+                    backgroundColor: 'rgba(234, 88, 12, 0.15)', color: '#ea580c',
+                    marginLeft: '4px', letterSpacing: '0.05em', textTransform: 'uppercase'
+                  }}>
+                    Advisory — Not Auto-Saved
+                  </span>
+                </h2>
+                <p className="text-xs text-on-surface-variant mb-4">
+                  🗺 These are real-world places found near your shoot base that match each scene's setting.
+                  Click <strong>Use This</strong> to pre-fill the scene's location name, then edit as needed.
+                  Suggestions do not create Location records — you still do that in the Locations tab.
+                </p>
+                <div className="space-y-3">
+                  {parsedData.scenes.map((scene, sceneIdx) => {
+                    const suggestions = parsedData.location_suggestions![String(scene.scene_number)] || [];
+                    if (!suggestions.length) return null;
+                    const isExpanded = expandedSuggestion === scene.scene_number;
+                    return (
+                      <div key={scene.scene_number} style={{
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                      }}>
+                        <button
+                          id={`suggestion-scene-${scene.scene_number}`}
+                          onClick={() => setExpandedSuggestion(isExpanded ? null : scene.scene_number)}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            background: 'rgba(255,255,255,0.04)',
+                            cursor: 'pointer',
+                            border: 'none',
+                            color: '#cdd6f4',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <span>Scene {scene.scene_number} — {scene.title}</span>
+                          <span style={{ fontSize: '11px', color: '#6c7086', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {suggestions.length} suggestion{suggestions.length > 1 ? 's' : ''}
+                            <span style={{ fontSize: '14px' }}>{isExpanded ? '▲' : '▼'}</span>
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {suggestions.map((place: any, pi: number) => (
+                              <div key={pi} style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                padding: '10px 14px',
+                                background: 'rgba(255,255,255,0.03)',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                              }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, fontSize: '13px', color: '#cdd6f4', marginBottom: '2px' }}>
+                                    {place.name}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#6c7086', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    📍 {place.address}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: '#45475a', marginTop: '2px' }}>
+                                    {place.lat?.toFixed(4)}, {place.lon?.toFixed(4)}
+                                  </div>
+                                </div>
+                                <button
+                                  id={`use-suggestion-${scene.scene_number}-${pi}`}
+                                  onClick={() => {
+                                    const newData = {...parsedData};
+                                    newData.scenes[sceneIdx].location_name = place.name;
+                                    setParsedData(newData);
+                                    setExpandedSuggestion(null);
+                                  }}
+                                  style={{
+                                    flexShrink: 0,
+                                    padding: '6px 14px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(139, 213, 202, 0.3)',
+                                    backgroundColor: 'rgba(139, 213, 202, 0.1)',
+                                    color: '#8bd5ca',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  Use This
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
             
             <div className="flex justify-end pt-4 gap-4">
               <button 

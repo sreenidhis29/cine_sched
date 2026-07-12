@@ -78,9 +78,11 @@ def _build_solver_data(project_id: str, db: Session) -> tuple:
             scene_number=s.scene_number,
             title=s.title,
             duration_minutes=s.duration_minutes or 60,
+            setting=s.setting or "INT",
             location_id=str(s.location_id) if s.location_id else None,
             cast_member_ids=[str(c.id) for c in s.cast_members],
             equipment_requirements=equip_requirements,
+            continuity_tags=list(s.continuity_tags or []),
         ))
 
     budget = SolverBudget(
@@ -90,7 +92,8 @@ def _build_solver_data(project_id: str, db: Session) -> tuple:
         equipment_cap=float(budget_db.equipment_cap) if budget_db and budget_db.equipment_cap else None,
     )
 
-    return scenes, cast, locations, equipment, budget
+    # Phase 4: also return raw location DB records for coordinate extraction
+    return scenes, cast, locations, equipment, budget, locs_db
 
 
 def _save_schedule(
@@ -116,6 +119,7 @@ def _save_schedule(
         violations=list(final_state.get("violations", [])),
         relaxations=list(final_state.get("relaxed_constraints", [])),
         iteration_count=final_state.get("iteration_count", 0),
+        extra_context=final_state.get("extra_context") or {},
     )
     db.add(schedule)
     db.flush()
@@ -130,6 +134,18 @@ def _save_schedule(
                 shoot_day=entry.shoot_day,
             )
             db.add(se)
+            
+    # Phase 5: Create Approval record if needed
+    if final_state.get("pending_approval"):
+        from db.models import Approval
+        approval = Approval(
+            id=str(uuid4()),
+            project_id=project_id,
+            run_id=run_id,
+            status="pending",
+            threshold_reason=final_state.get("threshold_reason", "Requires manual approval")
+        )
+        db.add(approval)
 
     db.commit()
     db.refresh(schedule)
@@ -153,22 +169,46 @@ def run_schedule(
     from api.projects import _require_project
     p = _require_project(project_id, user_id, db)
 
-    scenes, cast, locations, equipment, budget = _build_solver_data(project_id, db)
+    scenes, cast, locations, equipment, budget, locs_db = _build_solver_data(project_id, db)
 
     if not scenes:
         raise HTTPException(status_code=422, detail="Project has no scenes — add scenes before running.")
+
+    # Phase 4: Determine shoot-base coordinates (Option 1: first location with lat/lon)
+    # These are passed to weather_agent and travel_agent for forecast/routing checks.
+    shoot_base_lat = None
+    shoot_base_lon = None
+    for loc_db in locs_db:
+        if loc_db.latitude is not None and loc_db.longitude is not None:
+            shoot_base_lat = float(loc_db.latitude)
+            shoot_base_lon = float(loc_db.longitude)
+            break
+
+    # Phase 4: also pass lat/lon on SolverLocation objects for travel agent
+    locations_with_coords = []
+    for i, loc_db in enumerate(locs_db):
+        sl = locations[i]
+        # Attach coordinates as extra attributes the travel tool checks
+        sl_dict = sl.model_dump()
+        sl_dict["latitude"] = float(loc_db.latitude) if loc_db.latitude is not None else None
+        sl_dict["longitude"] = float(loc_db.longitude) if loc_db.longitude is not None else None
+        from models.schemas import SolverLocation as _SL
+        locations_with_coords.append(_SL(**sl_dict))
 
     initial_state: GraphState = {
         "project_id":           project_id,
         "run_id":               str(uuid4()),
         "scenes":               scenes,
         "cast":                 cast,
-        "locations":            locations,
+        "locations":            locations_with_coords,
         "equipment":            equipment,
         "budget":               budget,
         "start_date":           body.start_date,
         "relaxed_constraints":  body.relaxed_constraints,
         "iteration_count":      0,
+        # Phase 4: shoot-base coordinates for weather + geocoding agents
+        "shoot_base_lat":       shoot_base_lat,
+        "shoot_base_lon":       shoot_base_lon,
     }
 
     try:
@@ -178,6 +218,18 @@ def run_schedule(
         raise HTTPException(status_code=500, detail=f"Scheduling pipeline error: {e}")
 
     schedule = _save_schedule(project_id, final_state, db)
+    
+    # Phase 5: Trigger notification if pending approval
+    if final_state.get("pending_approval"):
+        from db.models import User
+        from integrations.notifications import send_approval_request_email
+        from config import settings
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            approval_link = f"{settings.FRONTEND_URL}/projects/{project_id}/approvals"
+            send_approval_request_email(user.email, p.name, final_state.get("threshold_reason", ""), approval_link)
+            
     return _schedule_to_response(schedule)
 
 
@@ -359,5 +411,6 @@ def _schedule_to_response(s: Schedule) -> ScheduleResponse:
         relaxations=list(s.relaxations or []),
         iteration_count=s.iteration_count or 0,
         entries=entries,
+        extra_context=s.extra_context or {},
         created_at=s.created_at,
     )

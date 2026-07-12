@@ -45,6 +45,8 @@ class GraphState(TypedDict, total=False):
     iteration_count: int
     accepted: bool                                    # True = schedule is final & accepted
     reject_reason: Optional[str]                      # set if critic gives up at cap
+    pending_approval: bool                            # Phase 5: True if requires human review
+    threshold_reason: Optional[str]                   # Phase 5: Reason for pending approval
 
     # ── Output ───────────────────────────────────────────────────────────────
     final_explanation: Optional[str]
@@ -52,3 +54,18 @@ class GraphState(TypedDict, total=False):
     # ── Pass-through metadata ────────────────────────────────────────────────
     whatif_question: Optional[str]                    # set for what-if runs
     extra_context: Optional[Dict[str, Any]]           # extensible for later phases
+
+    # ── Phase 4: Advisory (soft) violations ──────────────────────────────────
+    # These do NOT trigger the replan loop — they are informational warnings only.
+    weather_violations: List[str]                     # exterior scenes on high-risk weather days
+    travel_violations: List[str]                      # unrealistic location jump between shoot days
+    continuity_violations: List[str]                  # continuity-tagged scenes scheduled far apart
+
+    # Phase 4: Shoot-base coordinates (Option 1: first geocoded project location)
+    # Used by weather_agent for forecast lookup and location_suggestion_agent for search proximity.
+    shoot_base_lat: Optional[float]
+    shoot_base_lon: Optional[float]
+
+    # Phase 4: Location suggestions from location_suggestion_agent
+    # Dict[scene_id -> List[{name, address, lat, lon}]] -- suggestions only, never auto-committed.
+    location_suggestions: Optional[Dict[str, Any]]
