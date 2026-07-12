@@ -149,17 +149,12 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-background border-r border-outline-variant/30 flex flex-col z-30">
+    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-background border-r border-outline-variant/30 flex flex-col z-50">
       {/* Logo/Brand Area */}
       <div className="h-16 flex flex-col justify-center px-6 border-b border-outline-variant/30 flex-shrink-0">
-        <span className="text-[10px] font-label-md uppercase tracking-widest text-primary font-bold mb-0.5 truncate" title={activeOrgName}>
-          {activeOrgName}
-        </span>
         <div className="flex items-center">
-          <div className="w-5 h-5 flex items-center justify-center bg-surface-container-low rounded border border-outline-variant shadow-sm mr-2 flex-shrink-0">
-            <span className="material-symbols-outlined text-primary-container text-[12px]" style={{ fontVariationSettings: "'FILL' 1" }}>theaters</span>
-          </div>
-          <span className="font-headline-md text-[14px] text-on-surface tracking-tight font-bold uppercase">CineSched</span>
+          <img src="/logo.png" className="w-6 h-6 object-contain rounded mr-2 flex-shrink-0" alt="CineSched Logo" />
+          <span className="font-bold text-[13px] text-primary tracking-wider whitespace-nowrap uppercase leading-none">CINE SCHED</span>
         </div>
       </div>
 

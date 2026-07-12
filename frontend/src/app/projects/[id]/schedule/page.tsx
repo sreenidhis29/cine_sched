@@ -7,6 +7,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
 import { WeatherBadge, WeatherForecastStrip } from '@/components/ui/WeatherBadge';
+import Loader from '@/components/ui/Loader';
 
 
 export default function ScheduleViewPage() {
@@ -206,7 +207,10 @@ export default function ScheduleViewPage() {
           {/* Timeline Grid */}
           <div className="flex-1 overflow-y-auto pr-2 space-y-stack-lg custom-scrollbar">
             {loading ? (
-               <div className="flex justify-center items-center h-full text-on-surface-variant">Loading schedule...</div>
+                <div className="flex flex-col justify-center items-center h-full min-h-[400px]">
+                  <Loader />
+                  <span className="text-on-surface-variant font-medium mt-4">Loading schedule...</span>
+                </div>
             ) : scheduleDays.length === 0 ? (
                <div className="flex justify-center items-center h-full text-on-surface-variant">No schedule found. Try running the scheduler.</div>
             ) : (

@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
+import Loader from '@/components/ui/Loader';
 
 export default function ProjectEditorPage() {
   const params = useParams();
@@ -482,7 +483,10 @@ export default function ProjectEditorPage() {
         {/* Data Table */}
         <div className="bg-surface-container-low rounded-lg border border-outline-variant shadow-xl overflow-hidden min-h-[300px]">
           {loading ? (
-            <div className="flex justify-center items-center h-full min-h-[300px] text-on-surface-variant">Loading {activeTab}...</div>
+            <div className="flex flex-col justify-center items-center h-full min-h-[300px]">
+              <Loader />
+              <span className="text-on-surface-variant font-medium mt-4">Loading {activeTab}...</span>
+            </div>
           ) : (
             <DataTable data={getData()} columns={getColumns()} />
           )}

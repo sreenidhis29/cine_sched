@@ -156,7 +156,7 @@ export default function ChangePasswordPage() {
 
         <footer className="mt-6 text-center opacity-40">
           <p className="font-label-md text-label-md text-on-surface-variant tracking-[0.1em]">
-            CINESCHEDULE AI — AUTHORIZED PERSONNEL ONLY.
+            © 2026 Cine Sched — AUTHORIZED PERSONNEL ONLY.
           </p>
         </footer>
       </main>

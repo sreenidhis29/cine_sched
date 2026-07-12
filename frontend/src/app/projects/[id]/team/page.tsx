@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 import { AppShell } from '@/components/layout/AppShell';
+import Loader from '@/components/ui/Loader';
 
 export default function ProjectTeamPage() {
   const { id: projectId } = useParams();
@@ -55,7 +56,16 @@ export default function ProjectTeamPage() {
     }
   };
 
-  if (loading) return <div className="p-8 text-on-surface-variant">Loading team...</div>;
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center min-h-[50vh]">
+          <Loader />
+          <span className="text-on-surface-variant font-medium mt-4">Loading team...</span>
+        </div>
+      </AppShell>
+    );
+  }
 
   // Filter out people already added
   const availableOrgMembers = orgMembers.filter(om => 

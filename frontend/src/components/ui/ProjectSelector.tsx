@@ -12,7 +12,7 @@ export function ProjectSelector({ onSelect, selectedId }: ProjectSelectorProps) 
 
   useEffect(() => {
     let isMounted = true;
-    const activeOrgId = localStorage.getItem('active_org_id');
+    const activeOrgId = sessionStorage.getItem('active_org_id');
     const endpoint = activeOrgId ? `/api/projects?org_id=${activeOrgId}` : '/api/projects';
     
     apiClient.get(endpoint)

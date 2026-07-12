@@ -132,10 +132,37 @@ def list_locations(project_id: str, db: Session = Depends(get_db), user_id: str 
     return db.query(Location).filter(Location.project_id == project_id).all()
 
 
+def extract_coords_from_text(text: str) -> tuple[float | None, float | None]:
+    if not text:
+        return None, None
+    import re
+    # Matches patterns like 43.6532, -79.3832 or 43.6465 / -79.4630
+    pattern = r"(-?\d+\.\d+)\s*[,/]\s*(-?\d+\.\d+)"
+    match = re.search(pattern, text)
+    if match:
+        try:
+            lat = float(match.group(1))
+            lon = float(match.group(2))
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                return lat, lon
+        except ValueError:
+            pass
+    return None, None
+
+
 @router.post("/{project_id}/locations", response_model=LocationResponse, status_code=201)
 def create_location(project_id: str, body: LocationCreate, db: Session = Depends(get_db), user_id: str = Depends(get_current_user_id)):
     _require_project(project_id, user_id, db)
-    loc = Location(id=str(uuid4()), project_id=project_id, **body.model_dump())
+    data = body.model_dump()
+    if data.get("latitude") is None or data.get("longitude") is None:
+        lat, lon = extract_coords_from_text(data.get("name", ""))
+        if lat is None or lon is None:
+            lat, lon = extract_coords_from_text(data.get("address", ""))
+        if lat is not None and lon is not None:
+            data["latitude"] = lat
+            data["longitude"] = lon
+            
+    loc = Location(id=str(uuid4()), project_id=project_id, **data)
     db.add(loc)
     db.commit()
     db.refresh(loc)
@@ -298,7 +325,22 @@ def update_location(project_id: str, loc_id: str, body: LocationUpdate, db: Sess
     loc = db.query(Location).filter(Location.id == loc_id, Location.project_id == project_id).first()
     if not loc:
         raise HTTPException(status_code=404, detail="Location not found")
-    for k, v in body.model_dump(exclude_none=True).items():
+        
+    data = body.model_dump(exclude_none=True)
+    new_name = data.get("name", loc.name)
+    new_address = data.get("address", loc.address)
+    new_lat = data.get("latitude", loc.latitude)
+    new_lon = data.get("longitude", loc.longitude)
+    
+    if new_lat is None or new_lon is None:
+        lat, lon = extract_coords_from_text(new_name)
+        if lat is None or lon is None:
+            lat, lon = extract_coords_from_text(new_address)
+        if lat is not None and lon is not None:
+            data["latitude"] = lat
+            data["longitude"] = lon
+            
+    for k, v in data.items():
         setattr(loc, k, v)
     db.commit()
     db.refresh(loc)

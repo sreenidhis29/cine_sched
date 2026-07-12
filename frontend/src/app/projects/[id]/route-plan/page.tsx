@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
 import dynamic from 'next/dynamic';
 import { AgentActivityPanel } from '@/components/ui/AgentActivityPanel';
+import Loader from '@/components/ui/Loader';
 
 const routeSteps = [
   "Fetching location coordinates...",
@@ -48,7 +49,7 @@ export default function RoutePlanPage() {
         trip_type: tripType,
         start_location_id: startLocId || undefined
       });
-      sessionStorage.setItem('last_route_plan_result', JSON.stringify(res));
+      sessionStorage.setItem(`last_route_plan_result_${projectId}`, JSON.stringify(res));
       setRouteResult(res);
       setModalOpen(false);
     } catch (err) {
@@ -71,7 +72,7 @@ export default function RoutePlanPage() {
             setStartLocId(run.config_json.start_location_id);
           }
         } else {
-          const stored = sessionStorage.getItem('last_route_plan_result');
+          const stored = sessionStorage.getItem(`last_route_plan_result_${projectId}`);
           if (stored) {
             const parsed = JSON.parse(stored);
             setRouteResult(parsed);
@@ -102,8 +103,9 @@ export default function RoutePlanPage() {
   if (loadingRuns || loadingLocations) {
     return (
       <AppShell>
-        <div className="p-8 text-center text-on-surface-variant italic font-body-md">
-          Loading Route Planner...
+        <div className="flex flex-col items-center justify-center min-h-[50vh]">
+          <Loader />
+          <span className="text-on-surface-variant font-medium mt-4">Loading Route Planner...</span>
         </div>
       </AppShell>
     );

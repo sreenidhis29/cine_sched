@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { apiClient } from '@/lib/apiClient';
+import Loader from '../ui/Loader';
 
 // Full 13-role permission map.
 // Each entry lists the route prefixes this role can access.
@@ -123,7 +124,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname, router]);
 
   if (authorized === null) {
-    return <div className="min-h-screen bg-background flex items-center justify-center text-on-surface-variant">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+        <Loader />
+        <span className="text-on-surface-variant font-medium mt-4">Loading Cine Sched...</span>
+      </div>
+    );
   }
 
   return (

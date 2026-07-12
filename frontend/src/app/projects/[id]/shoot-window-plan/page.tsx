@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/apiClient';
 import { AgentActivityPanel } from '@/components/ui/AgentActivityPanel';
+import Loader from '@/components/ui/Loader';
 
 const shootSteps = [
   "Fetching Open-Meteo forecasts...",
@@ -44,7 +45,7 @@ export default function ShootWindowPlanPage() {
         location_ids: selectedLocationIds.length > 0 ? selectedLocationIds : undefined,
         date_range_days: dateRangeDays
       });
-      sessionStorage.setItem('last_shoot_window_result', JSON.stringify(res));
+      sessionStorage.setItem(`last_shoot_window_result_${projectId}`, JSON.stringify(res));
       setPlanResult(res);
       setModalOpen(false);
     } catch (err) {
@@ -69,7 +70,7 @@ export default function ShootWindowPlanPage() {
             setSelectedLocationIds(run.config_json.location_ids);
           }
         } else {
-          const stored = sessionStorage.getItem('last_shoot_window_result');
+          const stored = sessionStorage.getItem(`last_shoot_window_result_${projectId}`);
           if (stored) {
             const parsed = JSON.parse(stored);
             setPlanResult(parsed);
@@ -111,8 +112,9 @@ export default function ShootWindowPlanPage() {
   if (loadingRuns || loadingMetadata) {
     return (
       <AppShell>
-        <div className="p-8 text-center text-on-surface-variant italic font-body-md">
-          Loading Shoot Planner...
+        <div className="flex flex-col items-center justify-center min-h-[50vh]">
+          <Loader />
+          <span className="text-on-surface-variant font-medium mt-4">Loading Shoot Planner...</span>
         </div>
       </AppShell>
     );

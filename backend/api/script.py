@@ -83,6 +83,14 @@ async def parse_script(
        - cast_names (list of cast names present in the scene)
        - equipment_names (list of unique equipment names required for this scene, matching the
          unique equipment list above)
+    4. A list of all unique shoot locations explicitly mentioned in the document (including
+       those listed with addresses, notes, or coordinates in a Locations or Production Brief section).
+       For each location, extract:
+       - name: the name of the location (e.g., "Studio A (Main Stage)")
+       - address: the street address if mentioned (e.g. "120 Stage Road, Toronto, ON")
+       - latitude: the latitude coordinate if explicitly mentioned (e.g. 43.6532, as a float or null)
+       - longitude: the longitude coordinate if explicitly mentioned (e.g. -79.3832, as a float or null)
+       - cost_per_day: the rental cost per day if explicitly mentioned (as a float or 0.0)
 
     --- PART 2: BUDGET FIGURES ---
     Look for any Budget table or section in the document. Budget sections typically have
@@ -97,7 +105,7 @@ async def parse_script(
     IMPORTANT: If no budget section is present, output extracted_budget as null.
     Do NOT invent or estimate budget figures — only extract what is explicitly written.
 
-    Output JSON with keys: scenes, cast_members, equipment, extracted_budget.
+    Output JSON with keys: scenes, cast_members, equipment, locations, extracted_budget.
     extracted_budget should be null if not found, otherwise an object with fields:
     total_limit, cast_cap, location_cap, equipment_cap, makeup_cap, contingency_cap
     (omit or set to null any category not found in the document).
@@ -111,7 +119,7 @@ async def parse_script(
             messages=[{"role": "user", "content": prompt}],
             schema=ScriptExtractionResult,
             system_prompt=(
-                "Extract structured scenes, cast, and budget figures from the document. "
+                "Extract structured scenes, cast, locations, and budget figures from the document. "
                 "Output valid JSON. For extracted_budget: return null if no budget section exists — "
                 "never guess or invent dollar amounts."
             ),
@@ -181,14 +189,47 @@ def commit_script(
     # Track created locations to avoid duplicates
     location_map = {}  # name -> id
 
+    from api.projects import extract_coords_from_text
+
+    # First, create explicit locations extracted from the document
+    if hasattr(body, 'locations') and body.locations:
+        for loc in body.locations:
+            if loc.name not in location_map:
+                loc_id = str(uuid4())
+                
+                # If latitude/longitude are not provided by LLM, try to extract them from address or name
+                lat = loc.latitude
+                lon = loc.longitude
+                if lat is None or lon is None:
+                    text_to_search = f"{loc.name} {loc.address or ''}"
+                    extracted_lat, extracted_lon = extract_coords_from_text(text_to_search)
+                    if extracted_lat is not None and extracted_lon is not None:
+                        lat, lon = extracted_lat, extracted_lon
+
+                new_loc = Location(
+                    id=loc_id,
+                    project_id=project_id,
+                    name=loc.name,
+                    address=loc.address or "TBD",
+                    latitude=lat,
+                    longitude=lon,
+                    cost_per_day=loc.cost_per_day or 0.0
+                )
+                db.add(new_loc)
+                location_map[loc.name] = loc_id
+
+    # Then, fallback for any scenes that reference locations not explicitly extracted
     for scene in body.scenes:
         if scene.location_name not in location_map:
             loc_id = str(uuid4())
+            lat, lon = extract_coords_from_text(scene.location_name)
             new_loc = Location(
                 id=loc_id,
                 project_id=project_id,
                 name=scene.location_name,
-                address="TBD"
+                address="TBD",
+                latitude=lat,
+                longitude=lon
             )
             db.add(new_loc)
             location_map[scene.location_name] = loc_id

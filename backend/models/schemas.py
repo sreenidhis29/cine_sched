@@ -135,10 +135,18 @@ class ExtractedScene(BaseModel):
     equipment_names: List[str] = []
     continuity_tags: List[str] = []
 
+class ExtractedLocation(BaseModel):
+    name: str
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    cost_per_day: float = 0.0
+
 class ScriptExtractionResult(BaseModel):
     scenes: List[ExtractedScene]
     cast_members: List[ExtractedCast]
     equipment: List[ExtractedEquipment] = []
+    locations: List[ExtractedLocation] = []
     # Phase 4: AI-suggested real-world places keyed by scene_number (as string).
     # Suggestions only — never auto-committed. Review step required.
     location_suggestions: dict = {}
@@ -150,6 +158,7 @@ class ScriptCommitRequest(BaseModel):
     scenes: List[ExtractedScene]
     cast_members: List[ExtractedCast]
     equipment: List[ExtractedEquipment] = []
+    locations: List[ExtractedLocation] = []
     # Phase 6: Reviewed budget figures from the parse step.
     # If present AND no Budget row exists yet, a new Budget record is created.
     extracted_budget: Optional["ExtractedBudget"] = None

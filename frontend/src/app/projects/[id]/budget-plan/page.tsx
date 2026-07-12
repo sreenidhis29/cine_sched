@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/apiClient';
 import { AgentActivityPanel } from '@/components/ui/AgentActivityPanel';
+import Loader from '@/components/ui/Loader';
 
 const budgetSteps = [
   "Loading location and cast costs...",
@@ -37,8 +38,8 @@ function BudgetPlanPageContent() {
   const handleRecompute = async () => {
     setPlanningBudget(true);
     try {
-      const storedRoute = sessionStorage.getItem('last_route_plan_result');
-      const storedShoot = sessionStorage.getItem('last_shoot_window_result');
+      const storedRoute = sessionStorage.getItem(`last_route_plan_result_${projectId}`);
+      const storedShoot = sessionStorage.getItem(`last_shoot_window_result_${projectId}`);
       
       const payload: any = {
         crew_hourly_rate: crewHourlyRate
@@ -52,7 +53,7 @@ function BudgetPlanPageContent() {
       }
 
       const res = await apiClient.post(`/api/projects/${projectId}/budget-plan`, payload);
-      sessionStorage.setItem('last_budget_plan_result', JSON.stringify(res));
+      sessionStorage.setItem(`last_budget_plan_result_${projectId}`, JSON.stringify(res));
       setBudgetPlan(res);
       setModalOpen(false);
     } catch (err) {
@@ -74,7 +75,7 @@ function BudgetPlanPageContent() {
             setCrewHourlyRate(run.config_json.crew_hourly_rate);
           }
         } else {
-          const stored = sessionStorage.getItem('last_budget_plan_result');
+          const stored = sessionStorage.getItem(`last_budget_plan_result_${projectId}`);
           if (stored) {
             setBudgetPlan(JSON.parse(stored));
           }
@@ -103,8 +104,9 @@ function BudgetPlanPageContent() {
   if (loadingRuns || loadingMetadata) {
     return (
       <AppShell>
-        <div className="p-8 text-center text-on-surface-variant italic font-body-md">
-          Loading Cost Planner...
+        <div className="flex flex-col items-center justify-center min-h-[50vh]">
+          <Loader />
+          <span className="text-on-surface-variant font-medium mt-4">Loading Cost Planner...</span>
         </div>
       </AppShell>
     );
@@ -162,14 +164,14 @@ function BudgetPlanPageContent() {
                     <span className="material-symbols-outlined text-primary text-[18px]">route</span>
                     Route Planner Integration
                   </span>
-                  {typeof window !== 'undefined' && sessionStorage.getItem('last_route_plan_result') ? (
+                  {typeof window !== 'undefined' && sessionStorage.getItem(`last_route_plan_result_${projectId}`) ? (
                     <span className="text-[10px] bg-primary-container/20 text-primary-container border border-primary-container/30 px-1.5 py-0.5 rounded font-bold uppercase">Ready</span>
                   ) : (
                     <span className="text-[10px] bg-rose-950/30 text-rose-300 border border-rose-900/30 px-1.5 py-0.5 rounded font-bold uppercase">Not Run Yet</span>
                   )}
                 </div>
                 
-                {typeof window !== 'undefined' && sessionStorage.getItem('last_route_plan_result') ? (
+                {typeof window !== 'undefined' && sessionStorage.getItem(`last_route_plan_result_${projectId}`) ? (
                   <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
                     <input 
                       type="checkbox" 
@@ -193,14 +195,14 @@ function BudgetPlanPageContent() {
                     <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
                     Weather Shoot-Window Integration
                   </span>
-                  {typeof window !== 'undefined' && sessionStorage.getItem('last_shoot_window_result') ? (
+                  {typeof window !== 'undefined' && sessionStorage.getItem(`last_shoot_window_result_${projectId}`) ? (
                     <span className="text-[10px] bg-primary-container/20 text-primary-container border border-primary-container/30 px-1.5 py-0.5 rounded font-bold uppercase">Ready</span>
                   ) : (
                     <span className="text-[10px] bg-rose-950/30 text-rose-300 border border-rose-900/30 px-1.5 py-0.5 rounded font-bold uppercase">Not Run Yet</span>
                   )}
                 </div>
 
-                {typeof window !== 'undefined' && sessionStorage.getItem('last_shoot_window_result') ? (
+                {typeof window !== 'undefined' && sessionStorage.getItem(`last_shoot_window_result_${projectId}`) ? (
                   <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
                     <input 
                       type="checkbox" 
@@ -409,14 +411,14 @@ function BudgetPlanPageContent() {
                   <span className="material-symbols-outlined text-primary text-[18px]">route</span>
                   Route Planner Integration
                 </span>
-                {typeof window !== 'undefined' && sessionStorage.getItem('last_route_plan_result') ? (
+                {typeof window !== 'undefined' && sessionStorage.getItem(`last_route_plan_result_${projectId}`) ? (
                   <span className="text-[10px] bg-primary-container/20 text-primary-container border border-primary-container/30 px-1.5 py-0.5 rounded font-bold uppercase">Ready</span>
                 ) : (
                   <span className="text-[10px] bg-rose-950/30 text-rose-300 border border-rose-900/30 px-1.5 py-0.5 rounded font-bold uppercase">Not Run Yet</span>
                 )}
               </div>
               
-              {typeof window !== 'undefined' && sessionStorage.getItem('last_route_plan_result') ? (
+              {typeof window !== 'undefined' && sessionStorage.getItem(`last_route_plan_result_${projectId}`) ? (
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
                   <input 
                     type="checkbox" 
@@ -440,14 +442,14 @@ function BudgetPlanPageContent() {
                   <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
                   Weather Shoot-Window Integration
                 </span>
-                {typeof window !== 'undefined' && sessionStorage.getItem('last_shoot_window_result') ? (
+                {typeof window !== 'undefined' && sessionStorage.getItem(`last_shoot_window_result_${projectId}`) ? (
                   <span className="text-[10px] bg-primary-container/20 text-primary-container border border-primary-container/30 px-1.5 py-0.5 rounded font-bold uppercase">Ready</span>
                 ) : (
                   <span className="text-[10px] bg-rose-950/30 text-rose-300 border border-rose-900/30 px-1.5 py-0.5 rounded font-bold uppercase">Not Run Yet</span>
                 )}
               </div>
 
-              {typeof window !== 'undefined' && sessionStorage.getItem('last_shoot_window_result') ? (
+              {typeof window !== 'undefined' && sessionStorage.getItem(`last_shoot_window_result_${projectId}`) ? (
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
                   <input 
                     type="checkbox" 

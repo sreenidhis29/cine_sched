@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CineSched | Agentic Film Scheduling",
   description: "AI-powered film production scheduling platform",
+  icons: {
+    icon: "/logo.png"
+  }
 };
 
 export default function RootLayout({

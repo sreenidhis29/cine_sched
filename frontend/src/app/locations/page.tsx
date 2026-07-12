@@ -133,7 +133,7 @@ function LocationsPageContent() {
         trip_type: tripType,
         start_location_id: startLocId || undefined
       });
-      sessionStorage.setItem('last_route_plan_result', JSON.stringify(res));
+      sessionStorage.setItem(`last_route_plan_result_${projectId}`, JSON.stringify(res));
       setRouteModalOpen(false);
       router.push(`/projects/${projectId}/route-plan`);
     } catch (err) {
@@ -159,7 +159,7 @@ function LocationsPageContent() {
         location_ids: selectedLocationIds.length > 0 ? selectedLocationIds : undefined,
         date_range_days: dateRangeDays
       });
-      sessionStorage.setItem('last_shoot_window_result', JSON.stringify(res));
+      sessionStorage.setItem(`last_shoot_window_result_${projectId}`, JSON.stringify(res));
       setShootModalOpen(false);
       router.push(`/projects/${projectId}/shoot-window-plan`);
     } catch (err) {
@@ -173,8 +173,8 @@ function LocationsPageContent() {
   const handleRunBudgetPlanner = async () => {
     setPlanningBudget(true);
     try {
-      const storedRoute = sessionStorage.getItem('last_route_plan_result');
-      const storedShoot = sessionStorage.getItem('last_shoot_window_result');
+      const storedRoute = sessionStorage.getItem(`last_route_plan_result_${projectId}`);
+      const storedShoot = sessionStorage.getItem(`last_shoot_window_result_${projectId}`);
       
       const payload: any = {
         crew_hourly_rate: crewHourlyRate
@@ -188,7 +188,7 @@ function LocationsPageContent() {
       }
       
       const res = await apiClient.post(`/api/projects/${projectId}/budget-plan`, payload);
-      sessionStorage.setItem('last_budget_plan_result', JSON.stringify(res));
+      sessionStorage.setItem(`last_budget_plan_result_${projectId}`, JSON.stringify(res));
       setBudgetModalOpen(false);
       router.push(`/projects/${projectId}/budget-plan`);
     } catch (err) {
@@ -201,6 +201,18 @@ function LocationsPageContent() {
 
   const columns = [
     { header: 'Name', accessorKey: 'name' },
+    { 
+      header: 'Latitude', 
+      accessorKey: 'latitude',
+      isNumeric: true,
+      cell: (row: any) => row.latitude !== null && row.latitude !== undefined ? row.latitude.toFixed(6) : '-'
+    },
+    { 
+      header: 'Longitude', 
+      accessorKey: 'longitude',
+      isNumeric: true,
+      cell: (row: any) => row.longitude !== null && row.longitude !== undefined ? row.longitude.toFixed(6) : '-'
+    },
     { header: 'Cost/Day', accessorKey: 'cost_per_day', isNumeric: true },
     {
       header: 'Actions',
@@ -531,14 +543,14 @@ function LocationsPageContent() {
                       <span className="material-symbols-outlined text-primary text-[18px]">route</span>
                       Route Planner Integration
                     </span>
-                    {typeof window !== 'undefined' && sessionStorage.getItem('last_route_plan_result') ? (
+                    {typeof window !== 'undefined' && sessionStorage.getItem(`last_route_plan_result_${projectId}`) ? (
                       <span className="text-[10px] bg-primary-container/20 text-primary-container border border-primary-container/30 px-1.5 py-0.5 rounded font-bold uppercase">Ready</span>
                     ) : (
                       <span className="text-[10px] bg-rose-950/30 text-rose-300 border border-rose-900/30 px-1.5 py-0.5 rounded font-bold uppercase">Not Run Yet</span>
                     )}
                   </div>
                   
-                  {typeof window !== 'undefined' && sessionStorage.getItem('last_route_plan_result') ? (
+                  {typeof window !== 'undefined' && sessionStorage.getItem(`last_route_plan_result_${projectId}`) ? (
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
                       <input 
                         type="checkbox" 
@@ -562,14 +574,14 @@ function LocationsPageContent() {
                       <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
                       Weather Shoot-Window Integration
                     </span>
-                    {typeof window !== 'undefined' && sessionStorage.getItem('last_shoot_window_result') ? (
+                    {typeof window !== 'undefined' && sessionStorage.getItem(`last_shoot_window_result_${projectId}`) ? (
                       <span className="text-[10px] bg-primary-container/20 text-primary-container border border-primary-container/30 px-1.5 py-0.5 rounded font-bold uppercase">Ready</span>
                     ) : (
                       <span className="text-[10px] bg-rose-950/30 text-rose-300 border border-rose-900/30 px-1.5 py-0.5 rounded font-bold uppercase">Not Run Yet</span>
                     )}
                   </div>
 
-                  {typeof window !== 'undefined' && sessionStorage.getItem('last_shoot_window_result') ? (
+                  {typeof window !== 'undefined' && sessionStorage.getItem(`last_shoot_window_result_${projectId}`) ? (
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
                       <input 
                         type="checkbox" 
