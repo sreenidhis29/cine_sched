@@ -86,6 +86,9 @@ def check_weather_risk(inp: WeatherCheckInput) -> WeatherCheckResult:
                 "precipitation_sum_mm": fc.precipitation_sum_mm,
                 "wind_speed_max_kmh": fc.wind_speed_max_kmh,
                 "is_high_risk": fc.is_high_risk,
+                "temperature_2m_max": fc.temperature_2m_max,
+                "temperature_2m_min": fc.temperature_2m_min,
+                "precipitation_probability_max": fc.precipitation_probability_max,
             }
 
         scene = scene_by_id.get(entry.scene_id)

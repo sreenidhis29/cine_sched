@@ -7,6 +7,14 @@ import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/apiClient';
+import { AgentActivityPanel } from '@/components/ui/AgentActivityPanel';
+
+const shootSteps = [
+  "Fetching Open-Meteo forecasts...",
+  "Scoring suitability per location/day...",
+  "Ranking top recommended dates...",
+  "Done."
+];
 
 export default function ShootWindowPlanPage() {
   const { id: projectId } = useParams();
@@ -133,6 +141,7 @@ export default function ShootWindowPlanPage() {
             isOpen={modalOpen}
             onClose={() => setModalOpen(false)}
             title="Configure Weather Shoot-Window Planner"
+            sidePanel={<AgentActivityPanel isActive={planningShoot} steps={shootSteps} />}
             footer={
               <>
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 font-label-md uppercase hover:bg-surface-variant rounded transition-colors text-on-surface-variant">Cancel</button>
@@ -420,6 +429,7 @@ export default function ShootWindowPlanPage() {
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
           title="Configure Weather Shoot-Window Planner"
+          sidePanel={<AgentActivityPanel isActive={planningShoot} steps={shootSteps} />}
           footer={
             <>
               <button onClick={() => setModalOpen(false)} className="px-4 py-2 font-label-md uppercase hover:bg-surface-variant rounded transition-colors text-on-surface-variant">Cancel</button>

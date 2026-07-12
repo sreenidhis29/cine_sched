@@ -123,6 +123,8 @@ def solve_schedule(
 
     logger.info("CP-SAT: %d scenes, %d cast, %d locations, %d equipment, %d-day horizon",
                 len(scenes), len(cast), len(locations), len(equipment), num_days)
+    logger.info("Solver received %d preferred stops, %d preferred date sets",
+                len(preferred_location_order or []), len(preferred_shoot_dates or {}))
 
     # ── Build CP-SAT model ──────────────────────────────────────────────────
     model = cp_model.CpModel()

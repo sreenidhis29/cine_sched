@@ -6,7 +6,7 @@ import io
 from api.auth import get_current_user_id
 from db.session import get_db
 from db.models import Scene, CastMember, Location, Project, scene_cast_table, Equipment, SceneEquipment
-from models.schemas import ScriptExtractionResult, ScriptCommitRequest
+from models.schemas import ScriptExtractionResult, ScriptCommitRequest, ExtractedBudget
 from llm.router import structured_call, LLMRouterError
 from agents.location_suggestion_agent import suggest_locations_for_scenes
 
@@ -62,28 +62,59 @@ async def parse_script(
         raise HTTPException(status_code=400, detail="File contains no readable text")
         
     prompt = f"""
-    You are an expert script supervisor. Read the following script and extract:
+    You are an expert script supervisor and production accountant.
+    Read the following production document (which may be a screenplay, a production brief,
+    or a combined document) and extract two types of information:
+
+    --- PART 1: SCREENPLAY BREAKDOWN ---
     1. A list of all unique cast members and their roles.
-    2. A list of all unique equipment packages or items mentioned or logically required (e.g. Steadicam, Drone, HMI Lighting Package, Camera Package, etc.) along with estimated quantity and cost_per_day (default cost_per_day to standard rates, e.g., camera: $800, lighting: $400, steadicam: $300, sound: $250, drone: $600).
+    2. A list of all unique equipment packages or items mentioned or logically required
+       (e.g. Steadicam, Drone, HMI Lighting Package, Camera Package) along with estimated
+       quantity and cost_per_day (default cost_per_day to standard rates, e.g., camera: $800,
+       lighting: $400, steadicam: $300, sound: $250, drone: $600).
     3. A list of all scenes. For each scene, provide:
        - scene_number (integer)
        - title (short description, e.g. "EXT. COFFEE SHOP")
        - setting (INT or EXT)
        - time_of_day (DAY or NIGHT)
        - location_name (e.g. "COFFEE SHOP")
-       - duration_minutes (estimated duration to shoot, assume 1 page = 120 minutes of shooting as a baseline, or estimate reasonably)
+       - duration_minutes (estimated duration to shoot, assume 1 page = 120 minutes of shooting
+         as a baseline, or estimate reasonably)
        - cast_names (list of cast names present in the scene)
-       - equipment_names (list of unique equipment names required for this scene, matching the unique equipment list)
-       
-    Script text:
-    {text[:40000]} # Limit text length to avoid token limits, ideally handle gracefully
+       - equipment_names (list of unique equipment names required for this scene, matching the
+         unique equipment list above)
+
+    --- PART 2: BUDGET FIGURES ---
+    Look for any Budget table or section in the document. Budget sections typically have
+    category rows with dollar amounts, e.g.:
+      - "Cast (day rates + principals)"  -> cast_cap
+      - "Locations (rental + permits)"   -> location_cap
+      - "Equipment (camera, lighting, sound)" -> equipment_cap
+      - "Makeup / Prosthetics / Stunts"  -> makeup_cap
+      - "Overtime / Contingency Buffer" or "Contingency" -> contingency_cap
+      - "TOTAL PRODUCTION BUDGET" or "Total" -> total_limit
+    Map only figures explicitly stated in the document to the correct fields.
+    IMPORTANT: If no budget section is present, output extracted_budget as null.
+    Do NOT invent or estimate budget figures — only extract what is explicitly written.
+
+    Output JSON with keys: scenes, cast_members, equipment, extracted_budget.
+    extracted_budget should be null if not found, otherwise an object with fields:
+    total_limit, cast_cap, location_cap, equipment_cap, makeup_cap, contingency_cap
+    (omit or set to null any category not found in the document).
+
+    Document text:
+    {text[:40000]}
     """
     
     try:
         extraction = structured_call(
             messages=[{"role": "user", "content": prompt}],
             schema=ScriptExtractionResult,
-            system_prompt="Extract structured scenes and cast from the script. Output valid JSON.",
+            system_prompt=(
+                "Extract structured scenes, cast, and budget figures from the document. "
+                "Output valid JSON. For extracted_budget: return null if no budget section exists — "
+                "never guess or invent dollar amounts."
+            ),
             max_tokens=4000
         )
     except LLMRouterError as e:
@@ -229,14 +260,53 @@ def commit_script(
                     db.add(se)
 
     db.commit()
+
+    # ── Budget creation from extracted figures ────────────────────────────────
+    # Only runs if the user passed back extracted_budget figures AND no Budget
+    # record exists yet. An existing Budget row is NEVER silently overwritten.
+    budget_created = False
+    if body.extracted_budget is not None:
+        eb = body.extracted_budget
+        # Check at least one figure is non-null and non-zero
+        has_any_figure = any(
+            v is not None and v > 0
+            for v in [
+                eb.total_limit, eb.cast_cap, eb.location_cap,
+                eb.equipment_cap, eb.makeup_cap, eb.contingency_cap,
+            ]
+        )
+        if has_any_figure:
+            from db.models import Budget
+            existing_budget = db.query(Budget).filter(Budget.project_id == project_id).first()
+            if existing_budget is None:
+                new_budget = Budget(
+                    project_id=project_id,
+                    total_limit=eb.total_limit or 0,
+                    cast_cap=eb.cast_cap,
+                    location_cap=eb.location_cap,
+                    equipment_cap=eb.equipment_cap,
+                    makeup_cap=eb.makeup_cap,
+                    contingency_cap=eb.contingency_cap,
+                )
+                db.add(new_budget)
+                db.commit()
+                budget_created = True
+            else:
+                print(
+                    f"Budget record already exists for project {project_id} — "
+                    "extracted figures not auto-applied (use Budget Monitor to update manually)."
+                )
+
     return {
         "message": (
             f"Committed {len(body.scenes)} scenes, {len(body.cast_members)} cast members, "
             f"{len(equip_map)} equipment items, and {len(location_map)} locations."
+            + (" Budget record created from extracted figures." if budget_created else "")
         ),
         # cast_members returned so the frontend review step can offer per-person invite buttons.
         # No accounts exist yet — they are created only when admin clicks "Generate Invite".
         "cast_members": new_cast_records,
+        "budget_created": budget_created,
     }
 
 

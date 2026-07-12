@@ -7,6 +7,15 @@ import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
 import dynamic from 'next/dynamic';
+import { AgentActivityPanel } from '@/components/ui/AgentActivityPanel';
+
+const routeSteps = [
+  "Fetching location coordinates...",
+  "Requesting OSRM distance matrix...",
+  "Running OR-Tools route optimization...",
+  "Computing road-network polylines...",
+  "Done."
+];
 
 const RoutePlanMap = dynamic(() => import('@/components/ui/RoutePlanMap'), {
   ssr: false,
@@ -123,6 +132,7 @@ export default function RoutePlanPage() {
             isOpen={modalOpen}
             onClose={() => setModalOpen(false)}
             title="Configure Route Planner"
+            sidePanel={<AgentActivityPanel isActive={routing} steps={routeSteps} />}
             footer={
               <>
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 font-label-md uppercase hover:bg-surface-variant rounded transition-colors text-on-surface-variant">Cancel</button>
@@ -360,6 +370,7 @@ export default function RoutePlanPage() {
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
           title="Configure Route Optimizer"
+          sidePanel={<AgentActivityPanel isActive={routing} steps={routeSteps} />}
           footer={
             <>
               <button onClick={() => setModalOpen(false)} className="px-4 py-2 font-label-md uppercase hover:bg-surface-variant rounded transition-colors text-on-surface-variant">Cancel</button>

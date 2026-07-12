@@ -126,26 +126,84 @@ def _save_schedule(
 
     # Save schedule entries
     if solver_result and solver_result.feasible:
-        # Group entries by day to calculate sequential times
+        # ── Configurable day-start (default 08:00) ──────────────────────────
+        DAY_START_HOUR = 8  # 8 = 08:00 AM
+
+        # Build location coordinate lookup: location_id -> (lat, lon) or None
+        # Used to query OSRM drive time between consecutive scenes at different locations.
+        locs_db = db.query(Location).filter(Location.project_id == project_id).all()
+        loc_coords: dict[str, tuple[float, float] | None] = {
+            str(l.id): (float(l.latitude), float(l.longitude))
+            if (l.latitude is not None and l.longitude is not None)
+            else None
+            for l in locs_db
+        }
+
+        # Group solver entries by day
         from collections import defaultdict
         days_map = defaultdict(list)
         for entry in solver_result.schedule:
             days_map[entry.shoot_day].append(entry)
-            
+
         for day, entries in days_map.items():
-            # Sort entries arbitrarily (could sort by location in a real app)
-            current_time_minutes = 8 * 60  # Start at 8:00 AM
-            
+            # Resolve scene DB objects for each entry (needed for duration + location)
+            scene_db_map: dict[str, Scene] = {}
             for entry in entries:
-                # Query scene to get its duration
-                scene_db = db.query(Scene).filter(Scene.id == entry.scene_id).first()
+                s = db.query(Scene).filter(Scene.id == entry.scene_id).first()
+                if s:
+                    scene_db_map[entry.scene_id] = s
+
+            # Sort scenes within the day by scene_number for determinism
+            entries_sorted = sorted(
+                entries,
+                key=lambda e: scene_db_map[e.scene_id].scene_number
+                if e.scene_id in scene_db_map else 0,
+            )
+
+            current_time_minutes = DAY_START_HOUR * 60  # 08:00 = 480 min
+            prev_location_id: str | None = None
+
+            for entry in entries_sorted:
+                scene_db = scene_db_map.get(entry.scene_id)
                 duration = scene_db.duration_minutes if scene_db and scene_db.duration_minutes else 60
-                
+                current_loc_id = str(scene_db.location_id) if scene_db and scene_db.location_id else None
+
+                # ── Travel buffer between consecutive scenes at different locations ──
+                # Only attempted when both scenes have geocoded coordinates.
+                # If OSRM is unavailable, falls back to 0 gap (same behavior as before).
+                # Note: weather data is DAILY aggregate only (no hourly granularity),
+                # so time-of-day weather adjustments are not attempted here.
+                if (
+                    prev_location_id is not None
+                    and current_loc_id is not None
+                    and prev_location_id != current_loc_id
+                ):
+                    prev_coords = loc_coords.get(prev_location_id)
+                    curr_coords = loc_coords.get(current_loc_id)
+                    if prev_coords and curr_coords:
+                        try:
+                            from integrations.routing_client import get_travel_duration
+                            travel = get_travel_duration(
+                                prev_coords[0], prev_coords[1],
+                                curr_coords[0], curr_coords[1],
+                            )
+                            if travel.ok and travel.duration_minutes > 0:
+                                travel_buffer = int(travel.duration_minutes) + 1  # round up to nearest minute
+                                current_time_minutes += travel_buffer
+                                logger.debug(
+                                    "_save_schedule: Day %d — %d min travel buffer "
+                                    "between loc %s → %s",
+                                    day, travel_buffer, prev_location_id, current_loc_id,
+                                )
+                        except Exception as e:
+                            # Non-fatal: fall back to no gap
+                            logger.debug("_save_schedule: OSRM lookup failed (%s) — no travel buffer", e)
+
                 start_h, start_m = divmod(current_time_minutes, 60)
                 start_time_str = f"{start_h:02d}:{start_m:02d}:00"
-                
+
                 current_time_minutes += duration
-                
+
                 end_h, end_m = divmod(current_time_minutes, 60)
                 end_time_str = f"{end_h:02d}:{end_m:02d}:00"
 
@@ -158,7 +216,10 @@ def _save_schedule(
                     end_time=end_time_str,
                 )
                 db.add(se)
-            
+
+                prev_location_id = current_loc_id
+
+
     # Phase 5: Create Approval record if needed
     if final_state.get("pending_approval"):
         from db.models import Approval

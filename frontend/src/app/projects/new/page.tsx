@@ -21,7 +21,7 @@ export default function NewProjectWizard() {
   const [file, setFile] = useState<File | null>(null);
   
   // Step 3: Review
-  const [parsedData, setParsedData] = useState<{ scenes: any[], cast_members: any[], equipment: any[], location_suggestions?: Record<string, any[]> } | null>(null);
+  const [parsedData, setParsedData] = useState<{ scenes: any[], cast_members: any[], equipment: any[], location_suggestions?: Record<string, any[]>, extracted_budget?: { total_limit?: number | null; cast_cap?: number | null; location_cap?: number | null; equipment_cap?: number | null; makeup_cap?: number | null; contingency_cap?: number | null } | null } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   // Phase 4: which scene number is showing suggestion details
   const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null);
@@ -420,6 +420,59 @@ export default function NewProjectWizard() {
                 </table>
               </div>
             </Card>
+
+            {/* Extracted Budget — only shown when the LLM found a budget section */}
+            {parsedData.extracted_budget && (
+              <Card className="p-6">
+                <h2 className="font-headline-md text-on-surface mb-1 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary-container">account_balance_wallet</span>
+                  Extracted Budget Caps
+                  <span style={{
+                    fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '10px',
+                    backgroundColor: 'rgba(234, 88, 12, 0.15)', color: '#ea580c',
+                    marginLeft: '4px', letterSpacing: '0.05em', textTransform: 'uppercase'
+                  }}>
+                    Review Before Saving
+                  </span>
+                </h2>
+                <p className="text-xs text-on-surface-variant mb-4">
+                  These figures were extracted from your document. Edit any incorrect values before confirming. A Budget record will be created only if one does not already exist for this project.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { key: 'total_limit',     label: 'Total Production Budget' },
+                    { key: 'cast_cap',        label: 'Cast Cap' },
+                    { key: 'location_cap',    label: 'Locations Cap' },
+                    { key: 'equipment_cap',   label: 'Equipment Cap' },
+                    { key: 'makeup_cap',      label: 'Makeup / Prosthetics / Stunts Cap' },
+                    { key: 'contingency_cap', label: 'Contingency Cap' },
+                  ] as { key: keyof typeof parsedData.extracted_budget; label: string }[]).map(({ key, label }) => (
+                    <div key={key} className="flex flex-col gap-1">
+                      <label className="text-xs text-on-surface-variant uppercase tracking-wider font-bold">{label}</label>
+                      <div className="flex items-center gap-1 bg-surface-container border border-outline-variant/40 rounded px-3 py-2">
+                        <span className="text-on-surface-variant text-sm">$</span>
+                        <input
+                          type="number"
+                          className="flex-1 bg-transparent outline-none text-on-surface font-mono-data text-sm"
+                          value={parsedData.extracted_budget![key] ?? ''}
+                          placeholder="—"
+                          onChange={e => {
+                            const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                            setParsedData(prev => ({
+                              ...prev!,
+                              extracted_budget: { ...prev!.extracted_budget, [key]: val },
+                            }));
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-on-surface-variant/50 mt-3">
+                  ⚠ Known limitation: per-actor day rates are not extracted here (the brief shows aggregate cast caps only). Enter individual day rates manually in Cast Manager after setup.
+                </p>
+              </Card>
+            )}
 
             <Card className="p-6">
               <h2 className="font-headline-md text-on-surface mb-4 flex items-center gap-2">

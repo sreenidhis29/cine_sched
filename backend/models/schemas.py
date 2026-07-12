@@ -142,11 +142,17 @@ class ScriptExtractionResult(BaseModel):
     # Phase 4: AI-suggested real-world places keyed by scene_number (as string).
     # Suggestions only — never auto-committed. Review step required.
     location_suggestions: dict = {}
+    # Phase 6: Budget figures extracted from production brief PDF.
+    # None means no budget section found — do not default to non-zero values.
+    extracted_budget: Optional["ExtractedBudget"] = None
 
 class ScriptCommitRequest(BaseModel):
     scenes: List[ExtractedScene]
     cast_members: List[ExtractedCast]
     equipment: List[ExtractedEquipment] = []
+    # Phase 6: Reviewed budget figures from the parse step.
+    # If present AND no Budget row exists yet, a new Budget record is created.
+    extracted_budget: Optional["ExtractedBudget"] = None
 
 
 
@@ -220,6 +226,8 @@ class BudgetBase(BaseModel):
     cast_cap: Optional[float] = None
     location_cap: Optional[float] = None
     equipment_cap: Optional[float] = None
+    makeup_cap: Optional[float] = None
+    contingency_cap: Optional[float] = None
 
 
 class BudgetCreate(BudgetBase):
@@ -236,6 +244,19 @@ class BudgetResponse(BudgetBase):
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class ExtractedBudget(BaseModel):
+    """Budget figures extracted from an uploaded production brief PDF.
+    All fields are Optional — if no budget section was found in the document,
+    the LLM returns null/omits fields rather than guessing non-zero values.
+    """
+    total_limit: Optional[float] = None
+    cast_cap: Optional[float] = None
+    location_cap: Optional[float] = None
+    equipment_cap: Optional[float] = None
+    makeup_cap: Optional[float] = None
+    contingency_cap: Optional[float] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

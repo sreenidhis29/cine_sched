@@ -149,7 +149,7 @@ export default function ScheduleViewPage() {
         
         {/* Main Schedule Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 pb-4 mb-stack-md border-b border-outline-variant/30 flex-shrink-0">
+          <div className="flex flex-col gap-3 pb-4 mb-stack-md border-b border-outline-variant/30 flex-shrink-0">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-on-surface-variant font-label-md uppercase tracking-wider mb-2 text-xs">
                 <Link href="/projects" className="hover:text-primary-container transition-colors">Projects</Link>
@@ -162,7 +162,7 @@ export default function ScheduleViewPage() {
               </div>
               <h1 className="font-headline-lg text-headline-lg font-bold tracking-tight text-on-surface">Master Schedule</h1>
             </div>
-            <div className="flex flex-wrap gap-3 flex-shrink-0">
+            <div className="flex flex-wrap gap-3">
               <Link href={`/projects/${projectId}/trace`} className="flex items-center gap-2 border border-primary-container text-primary-container hover:bg-primary-container/10 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs">
                 <span className="material-symbols-outlined text-[16px]">psychology</span>
                 View Trace
@@ -188,12 +188,12 @@ export default function ScheduleViewPage() {
               </button>
               <button 
                 onClick={() => {
-                  window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/1?token=${sessionStorage.getItem('access_token') || ''}`, '_blank');
+                  window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/production-book/pdf?token=${sessionStorage.getItem('access_token') || ''}`, '_blank');
                 }}
                 className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs"
               >
-                <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
-                Call Sheet (Day 1)
+                <span className="material-symbols-outlined text-[16px]">menu_book</span>
+                Full Production Book
               </button>
             </div>
           </div>

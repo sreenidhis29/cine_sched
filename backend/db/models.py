@@ -96,7 +96,7 @@ class Project(Base):
     # relationships
     organization    = relationship("Organization", back_populates="projects")
     project_members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
-    locations       : List[Location]    = relationship("Location",    back_populates="project", cascade="all, delete-orphan")
+    locations       : List[Location]    = relationship("Location",    back_populates="project", uselist=True, cascade="all, delete-orphan")
     scenes          : List[Scene]       = relationship("Scene",       back_populates="project", cascade="all, delete-orphan")
     cast_members    : List[CastMember]  = relationship("CastMember",  back_populates="project", cascade="all, delete-orphan")
     equipment_items : List[Equipment]   = relationship("Equipment",   back_populates="project", cascade="all, delete-orphan")
@@ -244,6 +244,9 @@ class Budget(Base):
     cast_cap        = Column(Numeric(12, 2))
     location_cap    = Column(Numeric(12, 2))
     equipment_cap   = Column(Numeric(12, 2))
+    # Budget sub-caps extracted from production brief PDF (Phase 6)
+    makeup_cap      = Column(Numeric(12, 2), nullable=True, default=0)
+    contingency_cap = Column(Numeric(12, 2), nullable=True, default=0)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     project : Project = relationship("Project", back_populates="budget")

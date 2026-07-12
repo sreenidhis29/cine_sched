@@ -81,7 +81,19 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass  # Already exists — safe to ignore
 
-
+        # Phase 6: Add makeup_cap and contingency_cap to budgets if not present
+        try:
+            conn.execute(text(
+                "ALTER TABLE budgets ADD COLUMN IF NOT EXISTS "
+                "makeup_cap NUMERIC(12,2) DEFAULT 0"
+            ))
+            conn.execute(text(
+                "ALTER TABLE budgets ADD COLUMN IF NOT EXISTS "
+                "contingency_cap NUMERIC(12,2) DEFAULT 0"
+            ))
+            conn.commit()
+        except Exception:
+            pass  # Already exists — safe to ignore
 
     # Database seeding & clean-up
     from db.session import SessionLocal

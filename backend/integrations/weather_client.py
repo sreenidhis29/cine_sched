@@ -57,6 +57,9 @@ class DayForecast:
     precipitation_sum_mm: float
     wind_speed_max_kmh: float
     is_high_risk: bool
+    temperature_2m_max: Optional[float] = None
+    temperature_2m_min: Optional[float] = None
+    precipitation_probability_max: Optional[float] = None
 
 
 def get_forecast(
@@ -98,7 +101,7 @@ def get_forecast(
     params = {
         "latitude": lat,
         "longitude": lon,
-        "daily": "weather_code,precipitation_sum,wind_speed_10m_max",
+        "daily": "weather_code,precipitation_sum,wind_speed_10m_max,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "timezone": "auto",
@@ -118,6 +121,9 @@ def get_forecast(
     codes = daily.get("weather_code", [])
     precip = daily.get("precipitation_sum", [])
     wind = daily.get("wind_speed_10m_max", [])
+    temp_maxs = daily.get("temperature_2m_max", [])
+    temp_mins = daily.get("temperature_2m_min", [])
+    precip_probs = daily.get("precipitation_probability_max", [])
 
     results: List[DayForecast] = []
     for i, d_str in enumerate(dates):
@@ -128,6 +134,9 @@ def get_forecast(
         code = int(codes[i]) if i < len(codes) and codes[i] is not None else 0
         p = float(precip[i]) if i < len(precip) and precip[i] is not None else 0.0
         w = float(wind[i]) if i < len(wind) and wind[i] is not None else 0.0
+        t_max = float(temp_maxs[i]) if i < len(temp_maxs) and temp_maxs[i] is not None else None
+        t_min = float(temp_mins[i]) if i < len(temp_mins) and temp_mins[i] is not None else None
+        p_prob = float(precip_probs[i]) if i < len(precip_probs) and precip_probs[i] is not None else None
         high_risk = (code in WMO_HIGH_RISK_CODES) or (p >= PRECIP_HIGH_RISK_MM)
         results.append(DayForecast(
             date=d,
@@ -135,6 +144,9 @@ def get_forecast(
             precipitation_sum_mm=p,
             wind_speed_max_kmh=w,
             is_high_risk=high_risk,
+            temperature_2m_max=t_max,
+            temperature_2m_min=t_min,
+            precipitation_probability_max=p_prob,
         ))
 
     _forecast_cache[cache_key] = (now, results)

@@ -59,13 +59,14 @@ def generate_call_sheet(
     # If personalized, check if the user is in the cast, and only include their scenes
     personal_cast_member = None
     if user_id:
-        # We assume cast model has a user_id or similar link. Wait, does CastMember have user_id?
-        # Let's check CastMember schema. 
-        # Actually, let's just pass `personal_cast_member` if they are linked.
-        personal_cast_member = next((c for c in cast if getattr(c, 'linked_email', None) and c.linked_email != ""), None)
-        # We need a robust way to match User to CastMember.
-        # This will be refined.
-        pass
+        personal_cast_member = next((c for c in cast if str(c.user_id) == str(user_id) or (getattr(c, 'user', None) and str(c.user.id) == str(user_id))), None)
+        if personal_cast_member:
+            filtered_entries = []
+            for entry in day_entries:
+                sc = next((s for s in scenes if str(s.id) == str(entry.scene_id)), None)
+                if sc and any(str(cm.id) == str(personal_cast_member.id) for cm in getattr(sc, 'cast_members', [])):
+                    filtered_entries.append(entry)
+            day_entries = filtered_entries
 
     pdf = CallSheetPDF(project.name, day, shoot_date_str)
     pdf.add_page()
@@ -79,58 +80,137 @@ def generate_call_sheet(
             pdf.cell(0, 10, "Weather Forecast", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("helvetica", "", 10)
             
-            temp_max = _safe_float(weather.get("temperature_2m_max"))
-            temp_min = _safe_float(weather.get("temperature_2m_min"))
-            precip = _safe_float(weather.get("precipitation_probability_max"))
+            temp_max = weather.get("temperature_2m_max")
+            temp_min = weather.get("temperature_2m_min")
+            precip = weather.get("precipitation_probability_max")
+            precip_mm = weather.get("precipitation_sum_mm")
+            wind = weather.get("wind_speed_max_kmh")
+            wcode = weather.get("weather_code")
             
-            pdf.cell(0, 6, f"High: {temp_max}C | Low: {temp_min}C", new_x="LMARGIN", new_y="NEXT")
-            pdf.cell(0, 6, f"Precipitation Chance: {precip}%", new_x="LMARGIN", new_y="NEXT")
-            if weather.get("weather_code") is not None:
-                pdf.cell(0, 6, f"Code: {weather.get('weather_code')}", new_x="LMARGIN", new_y="NEXT")
+            if temp_max is not None and temp_min is not None:
+                pdf.cell(0, 6, f"Temperature Range: {temp_min:.1f}C to {temp_max:.1f}C", new_x="LMARGIN", new_y="NEXT")
+            elif temp_max is not None or temp_min is not None:
+                # Fallback to display whatever temperature values are present
+                t_val = temp_max if temp_max is not None else temp_min
+                pdf.cell(0, 6, f"Temperature: {t_val:.1f}C", new_x="LMARGIN", new_y="NEXT")
+            
+            if precip is not None:
+                pdf.cell(0, 6, f"Precipitation Probability: {precip:.0f}%", new_x="LMARGIN", new_y="NEXT")
+            if precip_mm is not None:
+                pdf.cell(0, 6, f"Precipitation Sum: {precip_mm:.1f} mm", new_x="LMARGIN", new_y="NEXT")
+            if wind is not None:
+                pdf.cell(0, 6, f"Max Wind Speed: {wind:.1f} km/h", new_x="LMARGIN", new_y="NEXT")
+            if wcode is not None:
+                pdf.cell(0, 6, f"Weather Code: {wcode}", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(5)
+
+    # Logistics & Travel Notes if multiple locations on this day
+    # Identify unique location sequence for this day in order of scene schedule
+    loc_sequence = []
+    for entry in day_entries:
+        sc = next((s for s in scenes if str(s.id) == str(entry.scene_id)), None)
+        if sc and sc.location_id:
+            locs_list = project.locations if hasattr(project.locations, '__iter__') else [project.locations]
+            loc_obj = next((l for l in locs_list if l and str(l.id) == str(sc.location_id)), None)
+            if loc_obj and (not loc_sequence or loc_sequence[-1].id != loc_obj.id):
+                loc_sequence.append(loc_obj)
+
+    logistics_notes = []
+    if len(loc_sequence) > 1:
+        for i in range(len(loc_sequence) - 1):
+            loc_a = loc_sequence[i]
+            loc_b = loc_sequence[i+1]
+            if (loc_a.latitude is not None and loc_a.longitude is not None and
+                loc_b.latitude is not None and loc_b.longitude is not None):
+                try:
+                    from integrations.routing_client import get_travel_duration
+                    travel = get_travel_duration(
+                        float(loc_a.latitude), float(loc_a.longitude),
+                        float(loc_b.latitude), float(loc_b.longitude)
+                    )
+                    if travel.ok:
+                        logistics_notes.append(
+                            f"Location Move: '{loc_a.name}' to '{loc_b.name}' is "
+                            f"approx. {travel.duration_minutes:.0f} mins drive ({travel.distance_km:.1f} km)."
+                        )
+                except Exception as e:
+                    pass
 
     # Schedule
     pdf.set_font("helvetica", "B", 14)
     pdf.cell(0, 10, "Shooting Schedule", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("helvetica", "B", 10)
-    
-    # Table Header
-    pdf.cell(25, 8, "Time", border=1, align="C")
-    pdf.cell(20, 8, "Scene", border=1, align="C")
-    pdf.cell(90, 8, "Title & Location", border=1, align="L")
-    pdf.cell(55, 8, "Cast Needed", border=1, align="L", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
 
-    pdf.set_font("helvetica", "", 9)
     for entry in day_entries:
         sc = next((s for s in scenes if str(s.id) == str(entry.scene_id)), None)
         if not sc: continue
         
         start_str = entry.start_time.strftime("%H:%M") if entry.start_time else "TBD"
         end_str = entry.end_time.strftime("%H:%M") if entry.end_time else "TBD"
-        time_str = f"{start_str}-{end_str}"
+        time_str = f"{start_str} - {end_str}"
         
-        cast_str = ", ".join([c.name for c in getattr(sc, 'cast_members', [])])
-        title_loc = f"{sc.title} ({sc.setting})"
-        if getattr(sc, 'location', None):
-            title_loc += f" @ {sc.location.name}"
+        # Calculate cast call time note (30 mins before)
+        if entry.start_time:
+            total_mins = entry.start_time.hour * 60 + entry.start_time.minute
+            call_mins = max(0, total_mins - 30)
+            call_h, call_m = divmod(call_mins, 60)
+            cast_call_time_str = f"{call_h:02d}:{call_m:02d}"
+        else:
+            cast_call_time_str = "TBD"
 
-        x_start = pdf.get_x()
-        y_start = pdf.get_y()
-        
-        pdf.cell(25, 8, time_str, border=1, align="C")
-        pdf.cell(20, 8, str(sc.scene_number), border=1, align="C")
-        
-        # Calculate heights for multicell
-        pdf.multi_cell(90, 8, title_loc, border=1, align="L", new_x="RIGHT", new_y="TOP")
-        
-        # Reset X/Y and do cast
-        pdf.set_xy(x_start + 135, y_start)
-        pdf.multi_cell(55, 8, cast_str if cast_str else "None", border=1, align="L", new_x="LMARGIN", new_y="NEXT")
-        
-        new_y = max(pdf.get_y(), y_start + 8)
-        pdf.set_y(new_y)
+        # Resolve location details
+        loc_name = "No Location"
+        loc_address = "No Address Provided"
+        if sc.location_id:
+            locs_list = project.locations if hasattr(project.locations, '__iter__') else [project.locations]
+            loc_obj = next((l for l in locs_list if l and str(l.id) == str(sc.location_id)), None)
+            if loc_obj:
+                loc_name = loc_obj.name
+                if loc_obj.address:
+                    loc_address = loc_obj.address
 
-    pdf.ln(10)
+        cast_names = [c.name for c in getattr(sc, 'cast_members', [])]
+        cast_str = ", ".join(cast_names) if cast_names else "None"
+
+        # Draw a beautiful bordered block for each scene
+        pdf.set_draw_color(200, 200, 200)
+        
+        # Start X and Y
+        start_x = pdf.get_x()
+        start_y = pdf.get_y()
+        
+        # Add padding and content
+        pdf.set_xy(start_x + 3, start_y + 3)
+        pdf.set_font("helvetica", "B", 11)
+        header_text = f"{time_str} | Scene {sc.scene_number} ({sc.setting}) - {sc.title}"
+        pdf.cell(0, 6, header_text, new_x="LMARGIN", new_y="NEXT")
+        
+        pdf.set_font("helvetica", "", 10)
+        pdf.set_x(start_x + 3)
+        pdf.cell(0, 5, f"Location: {loc_name} ({loc_address})", new_x="LMARGIN", new_y="NEXT")
+        
+        pdf.set_x(start_x + 3)
+        pdf.cell(0, 5, f"Cast Needed: {cast_str}", new_x="LMARGIN", new_y="NEXT")
+        
+        pdf.set_x(start_x + 3)
+        pdf.set_font("helvetica", "I", 9)
+        pdf.cell(0, 5, f"Cast Call Time Note: Arrive 30 mins prior at {cast_call_time_str}", new_x="LMARGIN", new_y="NEXT")
+        
+        end_y = pdf.get_y() + 3
+        
+        # Draw the surrounding rectangle
+        pdf.rect(start_x, start_y, 190, end_y - start_y)
+        pdf.set_y(end_y + 4)
+
+    pdf.ln(5)
+
+    if logistics_notes:
+        pdf.set_font("helvetica", "B", 12)
+        pdf.cell(0, 10, "Logistics & Travel", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 10)
+        for note in logistics_notes:
+            pdf.multi_cell(0, 6, f"- {note}", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
     
     pdf.set_font("helvetica", "B", 12)
     pdf.cell(0, 10, "General Notes", new_x="LMARGIN", new_y="NEXT")

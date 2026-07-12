@@ -7,6 +7,15 @@ import { Card } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { apiClient } from '@/lib/apiClient';
+import { AgentActivityPanel } from '@/components/ui/AgentActivityPanel';
+
+const budgetSteps = [
+  "Loading location and cast costs...",
+  "Applying route travel costs...",
+  "Applying shoot-window date costs...",
+  "Computing category breakdown...",
+  "Done."
+];
 
 function BudgetPlanPageContent() {
   const { id: projectId } = useParams();
@@ -124,6 +133,7 @@ function BudgetPlanPageContent() {
             isOpen={modalOpen}
             onClose={() => setModalOpen(false)}
             title="Configure Budget Planner"
+            sidePanel={<AgentActivityPanel isActive={planningBudget} steps={budgetSteps} />}
             footer={
               <>
                 <button onClick={() => setModalOpen(false)} className="px-4 py-2 font-label-md uppercase hover:bg-surface-variant rounded transition-colors text-on-surface-variant">Cancel</button>
@@ -370,6 +380,7 @@ function BudgetPlanPageContent() {
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}
           title="Configure Budget Planner"
+          sidePanel={<AgentActivityPanel isActive={planningBudget} steps={budgetSteps} />}
           footer={
             <>
               <button onClick={() => setModalOpen(false)} className="px-4 py-2 font-label-md uppercase hover:bg-surface-variant rounded transition-colors text-on-surface-variant">Cancel</button>
