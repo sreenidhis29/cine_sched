@@ -19,7 +19,7 @@ from agents.state import GraphState
 from api.auth import get_current_user_id
 from db.models import (
     Budget, CastMember, Equipment, Location, Project, Schedule,
-    ScheduleEntry, Scene, SceneEquipment, ReasoningTrace
+    ScheduleEntry, Scene, SceneEquipment, ReasoningTrace, PlannerRun
 )
 from db.session import get_db
 from llm.router import chat as llm_chat, LLMRouterError
@@ -177,6 +177,57 @@ def _save_schedule(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# HELPERS FOR PLANNER INTEGRATION
+# ─────────────────────────────────────────────────────────────────────────────
+def _get_planner_preferences(project_id: str, db: Session) -> tuple[Optional[List[str]], Optional[dict], dict]:
+    # Fetch latest route planner run
+    preferred_location_order = None
+    route_run_id = None
+    route_run_date = None
+    route_run = (
+        db.query(PlannerRun)
+        .filter(PlannerRun.project_id == project_id, PlannerRun.plan_type == "route")
+        .order_by(PlannerRun.created_at.desc())
+        .first()
+    )
+    if route_run and route_run.result_json:
+        preferred_location_order = route_run.result_json.get("ordered_stops")
+        route_run_id = str(route_run.id)
+        route_run_date = route_run.created_at.isoformat()
+
+    # Fetch latest shoot window planner run
+    preferred_shoot_dates = None
+    shoot_run_id = None
+    shoot_run_date = None
+    shoot_run = (
+        db.query(PlannerRun)
+        .filter(PlannerRun.project_id == project_id, PlannerRun.plan_type == "shoot_window")
+        .order_by(PlannerRun.created_at.desc())
+        .first()
+    )
+    if shoot_run and shoot_run.result_json:
+        preferred_shoot_dates = {}
+        for loc_res in shoot_run.result_json.get("locations", []):
+            loc_id = loc_res.get("location_id")
+            if loc_id:
+                preferred_shoot_dates[loc_id] = [
+                    rec.get("date") for rec in loc_res.get("recommended_dates", [])
+                ]
+        shoot_run_id = str(shoot_run.id)
+        shoot_run_date = shoot_run.created_at.isoformat()
+
+    extra_context = {}
+    if route_run_id:
+        extra_context["route_plan_run_id"] = route_run_id
+        extra_context["route_plan_run_date"] = route_run_date
+    if shoot_run_id:
+        extra_context["shoot_window_plan_run_id"] = shoot_run_id
+        extra_context["shoot_window_plan_run_date"] = shoot_run_date
+        
+    return preferred_location_order, preferred_shoot_dates, extra_context
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # POST /projects/{id}/run
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/{project_id}/run", response_model=ScheduleResponse)
@@ -219,6 +270,8 @@ def run_schedule(
         from models.schemas import SolverLocation as _SL
         locations_with_coords.append(_SL(**sl_dict))
 
+    preferred_location_order, preferred_shoot_dates, extra_context = _get_planner_preferences(project_id, db)
+
     initial_state: GraphState = {
         "project_id":           project_id,
         "run_id":               str(uuid4()),
@@ -233,6 +286,9 @@ def run_schedule(
         # Phase 4: shoot-base coordinates for weather + geocoding agents
         "shoot_base_lat":       shoot_base_lat,
         "shoot_base_lon":       shoot_base_lon,
+        "preferred_location_order": preferred_location_order,
+        "preferred_shoot_dates": preferred_shoot_dates,
+        "extra_context":        extra_context,
     }
 
     try:
@@ -341,7 +397,28 @@ def whatif(
     from api.projects import _require_project
     p = _require_project(project_id, user_id, db)
 
-    scenes, cast, locations, equipment, budget = _build_solver_data(project_id, db)
+    scenes, cast, locations, equipment, budget, locs_db = _build_solver_data(project_id, db)
+
+    # Phase 4: Determine shoot-base coordinates
+    shoot_base_lat = None
+    shoot_base_lon = None
+    for loc_db in locs_db:
+        if loc_db.latitude is not None and loc_db.longitude is not None:
+            shoot_base_lat = float(loc_db.latitude)
+            shoot_base_lon = float(loc_db.longitude)
+            break
+
+    # Phase 4: also pass lat/lon on SolverLocation objects
+    locations_with_coords = []
+    for i, loc_db in enumerate(locs_db):
+        sl = locations[i]
+        sl_dict = sl.model_dump()
+        sl_dict["latitude"] = float(loc_db.latitude) if loc_db.latitude is not None else None
+        sl_dict["longitude"] = float(loc_db.longitude) if loc_db.longitude is not None else None
+        from models.schemas import SolverLocation as _SL
+        locations_with_coords.append(_SL(**sl_dict))
+
+    preferred_location_order, preferred_shoot_dates, planner_extra = _get_planner_preferences(project_id, db)
 
     # Use LLM to interpret the what-if question into constraint relaxations
     cast_info = "\n".join(f"  id={c.id}, name={c.name}" for c in cast)
@@ -374,19 +451,26 @@ Return a brief explanation of how you interpreted the question and what changes 
     except LLMRouterError:
         interpretation = f"Processing: {body.message}"
 
+    extra_context = {"whatif_interpretation": interpretation}
+    extra_context.update(planner_extra)
+
     # Re-run pipeline with context from the what-if question
     initial_state: GraphState = {
         "project_id":           project_id,
         "run_id":               str(uuid4()),
         "scenes":               scenes,
         "cast":                 cast,
-        "locations":            locations,
+        "locations":            locations_with_coords,
         "equipment":            equipment,
         "budget":               budget,
         "relaxed_constraints":  [],
         "iteration_count":      0,
         "whatif_question":      body.message,
-        "extra_context":        {"whatif_interpretation": interpretation},
+        "extra_context":        extra_context,
+        "shoot_base_lat":       shoot_base_lat,
+        "shoot_base_lon":       shoot_base_lon,
+        "preferred_location_order": preferred_location_order,
+        "preferred_shoot_dates": preferred_shoot_dates,
     }
 
     try:

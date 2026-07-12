@@ -5,7 +5,7 @@ as a LangGraph-compatible tool with typed Pydantic I/O.
 from __future__ import annotations
 
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from pydantic import BaseModel
 
@@ -29,6 +29,8 @@ class RunSolverInput(BaseModel):
     relaxed_constraints: List[str] = []
     start_date: Optional[date] = None
     max_shoot_days: Optional[int] = None
+    preferred_location_order: Optional[List[str]] = None
+    preferred_shoot_dates: Optional[Dict[str, List[str]]] = None
 
 
 def run_solver(inp: RunSolverInput) -> SolverResult:
@@ -50,4 +52,6 @@ def run_solver(inp: RunSolverInput) -> SolverResult:
         relaxed_constraints=inp.relaxed_constraints,
         start_date=inp.start_date,
         max_shoot_days=inp.max_shoot_days,
+        preferred_location_order=inp.preferred_location_order,
+        preferred_shoot_dates=inp.preferred_shoot_dates,
     )

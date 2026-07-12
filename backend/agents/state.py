@@ -69,3 +69,7 @@ class GraphState(TypedDict, total=False):
     # Phase 4: Location suggestions from location_suggestion_agent
     # Dict[scene_id -> List[{name, address, lat, lon}]] -- suggestions only, never auto-committed.
     location_suggestions: Optional[Dict[str, Any]]
+
+    # soft cost planner preferences
+    preferred_location_order: Optional[List[str]]
+    preferred_shoot_dates: Optional[Dict[str, List[str]]]

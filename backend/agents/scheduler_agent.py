@@ -26,6 +26,8 @@ def scheduler_agent(state: GraphState) -> GraphState:
         budget=state.get("budget"),
         relaxed_constraints=state.get("relaxed_constraints", []),
         start_date=state.get("start_date"),
+        preferred_location_order=state.get("preferred_location_order"),
+        preferred_shoot_dates=state.get("preferred_shoot_dates"),
     )
 
     logger.info(

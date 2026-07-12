@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from api.auth import get_current_user_id
 from db.models import (
     Budget, CastMember, Equipment, Location, Project, Scene,
-    SceneEquipment, scene_cast_table,
+    SceneEquipment, scene_cast_table, PlannerRun,
 )
 from db.session import get_db
 from models.schemas import (
@@ -25,6 +25,10 @@ from models.schemas import (
     LocationCreate, LocationResponse, LocationUpdate,
     ProjectCreate, ProjectResponse, ProjectUpdate,
     SceneCreate, SceneResponse, SceneUpdate,
+    RoutePlanRequest, RouteResult,
+    ShootWindowPlanRequest, ShootWindowResult,
+    BudgetPlanRequest, BudgetResult,
+    PlannerRunResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,6 +140,156 @@ def create_location(project_id: str, body: LocationCreate, db: Session = Depends
     db.commit()
     db.refresh(loc)
     return loc
+
+
+@router.post("/{project_id}/route-plan", response_model=RouteResult)
+def run_route_plan(
+    project_id: str,
+    body: RoutePlanRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Run route optimization on project locations without persisting anything.
+    """
+    _require_project(project_id, user_id, db)
+    
+    locations = db.query(Location).filter(Location.project_id == project_id).all()
+    if not locations:
+        raise HTTPException(status_code=400, detail="Project has no locations to optimize.")
+        
+    from solver.route_optimizer import optimize_route
+    from models.schemas import RouteResult
+    try:
+        result = optimize_route(
+            locations=locations,
+            trip_type=body.trip_type,
+            start_location_id=body.start_location_id
+        )
+        
+        # Persist run
+        run = PlannerRun(
+            project_id=project_id,
+            plan_type="route",
+            config_json=body.model_dump(),
+            result_json=result.model_dump()
+        )
+        db.add(run)
+        db.commit()
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error optimizing route: {e}")
+        raise HTTPException(status_code=500, detail=f"Route planning failed: {str(e)}")
+
+
+@router.post("/{project_id}/shoot-window-plan", response_model=ShootWindowResult)
+def run_shoot_window_plan(
+    project_id: str,
+    body: ShootWindowPlanRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Evaluate weather suitability for exterior locations.
+    """
+    _require_project(project_id, user_id, db)
+
+    from solver.shoot_window_optimizer import get_exterior_locations, optimize_shoot_windows
+
+    if body.location_ids is not None:
+        # Load the specific locations requested
+        locations = db.query(Location).filter(Location.id.in_(body.location_ids), Location.project_id == project_id).all()
+    else:
+        # Auto-derive exterior locations
+        locations = get_exterior_locations(project_id, db)
+
+    if not locations:
+        raise HTTPException(status_code=400, detail="No locations selected or detected for shoot-window planning.")
+
+    try:
+        result = optimize_shoot_windows(
+            locations=locations,
+            date_range_days=min(16, max(1, body.date_range_days))
+        )
+        
+        # Persist run
+        run = PlannerRun(
+            project_id=project_id,
+            plan_type="shoot_window",
+            config_json=body.model_dump(),
+            result_json=result.model_dump()
+        )
+        db.add(run)
+        db.commit()
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error optimizing shoot windows: {e}")
+        raise HTTPException(status_code=500, detail=f"Shoot-window planning failed: {str(e)}")
+
+
+@router.post("/{project_id}/budget-plan", response_model=BudgetResult)
+def run_budget_plan(
+    project_id: str,
+    body: BudgetPlanRequest,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Run budget optimization breakdown based on active planners.
+    """
+    _require_project(project_id, user_id, db)
+
+    from solver.budget_optimizer import compute_budget
+
+    try:
+        route_dict = body.route_plan.model_dump() if body.route_plan else None
+        window_dict = body.shoot_window_plan.model_dump() if body.shoot_window_plan else None
+
+        result = compute_budget(
+            project_id=project_id,
+            db=db,
+            route_plan=route_dict,
+            shoot_window_plan=window_dict,
+            crew_hourly_rate=body.crew_hourly_rate
+        )
+        
+        # Persist run
+        run = PlannerRun(
+            project_id=project_id,
+            plan_type="budget",
+            config_json=body.model_dump(),
+            result_json=result.model_dump()
+        )
+        db.add(run)
+        db.commit()
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error computing budget breakdown: {e}")
+        raise HTTPException(status_code=500, detail=f"Budget calculation failed: {str(e)}")
+
+
+@router.get("/{project_id}/planner-runs", response_model=Optional[PlannerRunResponse])
+def get_latest_planner_run(
+    project_id: str,
+    plan_type: str,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Get the most recent planner run of a given type.
+    """
+    _require_project(project_id, user_id, db)
+    
+    run = (
+        db.query(PlannerRun)
+        .filter(PlannerRun.project_id == project_id, PlannerRun.plan_type == plan_type)
+        .order_by(PlannerRun.created_at.desc())
+        .first()
+    )
+    return run
 
 
 @router.patch("/{project_id}/locations/{loc_id}", response_model=LocationResponse)

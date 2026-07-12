@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
 
-export default function ResourcesPage() {
+function ResourcesPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -226,5 +226,19 @@ export default function ResourcesPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function ResourcesPage() {
+  return (
+    <React.Suspense fallback={
+      <AppShell>
+        <div className="p-8 text-center text-on-surface-variant italic font-body-md">
+          Loading Resources...
+        </div>
+      </AppShell>
+    }>
+      <ResourcesPageContent />
+    </React.Suspense>
   );
 }

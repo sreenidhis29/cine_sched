@@ -405,3 +405,101 @@ class WhatIfRequest(BaseModel):
 class WhatIfResponse(BaseModel):
     schedule: Optional[ScheduleResponse] = None
     explanation: str
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ROUTE PLANNER
+# ─────────────────────────────────────────────────────────────────────────────
+class RoutePlanRequest(BaseModel):
+    trip_type: str  # "round_trip" | "one_way"
+    start_location_id: Optional[str] = None
+
+
+class RouteSegment(BaseModel):
+    from_location_id: str
+    from_location_name: str
+    to_location_id: str
+    to_location_name: str
+    distance_km: float
+    duration_min: float
+    polyline: List[List[float]] = []  # [[lat, lon], ...]
+
+
+class RouteResult(BaseModel):
+    trip_type: str
+    ordered_stops: List[str]
+    segments: List[RouteSegment]
+    total_distance_km: float
+    total_duration_min: float
+    naive_order_total_duration_min: float
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SHOOT WINDOW PLANNER
+# ─────────────────────────────────────────────────────────────────────────────
+class ShootWindowPlanRequest(BaseModel):
+    location_ids: Optional[List[str]] = None
+    date_range_days: int = 16
+
+
+class ShootWindowDayScore(BaseModel):
+    date: str
+    score: float
+    precip_prob: float
+    wind_kmh: float
+    temp_c: float
+    precip_mm: float
+
+
+class ShootWindowRecommendation(BaseModel):
+    date: str
+    score: float
+    reason: str
+
+
+class ShootWindowLocationResult(BaseModel):
+    location_id: str
+    name: str
+    day_scores: List[ShootWindowDayScore]
+    recommended_dates: List[ShootWindowRecommendation]
+
+
+class ShootWindowResult(BaseModel):
+    locations: List[ShootWindowLocationResult]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUDGET PLANNER
+# ─────────────────────────────────────────────────────────────────────────────
+class BudgetCategory(BaseModel):
+    name: str
+    amount: float
+    is_estimate: bool
+    note: Optional[str] = None
+
+
+class BudgetPlanRequest(BaseModel):
+    route_plan: Optional[RouteResult] = None
+    shoot_window_plan: Optional[ShootWindowResult] = None
+    crew_hourly_rate: float = 500.0
+
+
+class BudgetResult(BaseModel):
+    categories: List[BudgetCategory]
+    total: float
+    budget_cap: float
+    over_under_amount: float
+    naive_total: float
+    optimized_total: float
+    savings: float
+
+
+class PlannerRunResponse(BaseModel):
+    id: str
+    project_id: str
+    plan_type: str
+    config_json: dict
+    result_json: dict
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

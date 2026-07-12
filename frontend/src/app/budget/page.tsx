@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
 
-export default function BudgetPage() {
+function BudgetPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -196,5 +196,19 @@ export default function BudgetPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function BudgetPage() {
+  return (
+    <React.Suspense fallback={
+      <AppShell>
+        <div className="p-8 text-center text-on-surface-variant italic font-body-md">
+          Loading Budget...
+        </div>
+      </AppShell>
+    }>
+      <BudgetPageContent />
+    </React.Suspense>
   );
 }

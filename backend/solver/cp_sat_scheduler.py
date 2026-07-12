@@ -48,6 +48,8 @@ MAX_MINUTES_PER_DAY = 600       # 10-hour shoot day
 MAX_DAYS_HORIZON = 30           # maximum shoot days we'll ever consider
 LOCATION_MOVE_PENALTY = 500     # cost penalty per location change between days (in solver units)
 SCALE = 100                     # scale factor to keep costs as integers (cents)
+WEATHER_PREFERENCE_PENALTY = 200  # soft penalty for shooting exterior scene on non-preferred day
+ROUTE_PREFERENCE_PENALTY = 100    # soft penalty for pairwise order inversion of locations
 
 
 def _date_to_day(ref: date, d: date) -> int:
@@ -82,6 +84,8 @@ def solve_schedule(
     relaxed_constraints: Optional[List[str]] = None,
     start_date: Optional[date] = None,
     max_shoot_days: Optional[int] = None,
+    preferred_location_order: Optional[List[str]] = None,
+    preferred_shoot_dates: Optional[Dict[str, List[str]]] = None,
 ) -> SolverResult:
     """
     Solve the film scheduling problem using OR-Tools CP-SAT.
@@ -281,6 +285,43 @@ def solve_schedule(
                 overflow_clamped = model.new_int_var(0, len(locations) - 1, f"loc_overflow_clamped_day_{d}")
                 model.add_max_equality(overflow_clamped, [overflow, model.new_constant(0)])
                 cost_terms.append(LOCATION_MOVE_PENALTY * SCALE * overflow_clamped)
+
+    # ── Soft preferences from Route Planner & Shoot-Window Planner ──────────────────
+    # Soft weather preference: penalize shooting exterior scenes on non-preferred days
+    if preferred_shoot_dates:
+        for s in scenes:
+            is_ext = s.setting and "ext" in s.setting.lower()
+            if is_ext and s.location_id in preferred_shoot_dates:
+                preferred_dates = preferred_shoot_dates[s.location_id]
+                for d in range(1, num_days + 1):
+                    shoot_date = ref_date + timedelta(days=d - 1)
+                    if shoot_date.isoformat() not in preferred_dates:
+                        b = is_scene_on_day[s.id][d - 1]
+                        cost_terms.append(WEATHER_PREFERENCE_PENALTY * SCALE * b)
+
+    # Soft routing order preference: penalize sequence order inversions
+    if preferred_location_order:
+        loc_order_idx = {loc_id: idx for idx, loc_id in enumerate(preferred_location_order)}
+        valid_scenes = [s for s in scenes if s.location_id in loc_order_idx]
+        for i in range(len(valid_scenes)):
+            for j in range(i + 1, len(valid_scenes)):
+                s_a = valid_scenes[i]
+                s_b = valid_scenes[j]
+                if s_a.location_id == s_b.location_id:
+                    continue
+                
+                idx_a = loc_order_idx[s_a.location_id]
+                idx_b = loc_order_idx[s_b.location_id]
+                
+                if idx_a < idx_b:
+                    first_scene, second_scene = s_a, s_b
+                else:
+                    first_scene, second_scene = s_b, s_a
+                
+                inversion = model.new_bool_var(f"inv_{first_scene.id}_{second_scene.id}")
+                model.add(scene_day[first_scene.id] > scene_day[second_scene.id]).only_enforce_if(inversion)
+                model.add(scene_day[first_scene.id] <= scene_day[second_scene.id]).only_enforce_if(inversion.negated())
+                cost_terms.append(ROUTE_PREFERENCE_PENALTY * SCALE * inversion)
 
     if cost_terms:
         model.minimize(sum(cost_terms))

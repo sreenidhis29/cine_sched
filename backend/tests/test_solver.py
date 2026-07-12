@@ -74,3 +74,23 @@ def test_solver_relaxed_becomes_feasible():
     
     assert result.feasible is True
     assert len(result.schedule) == 1
+
+
+def test_route_optimizer():
+    from solver.route_optimizer import optimize_route
+    from db.models import Location
+    
+    locations = [
+        Location(id="loc1", name="Shoot Base", latitude=12.9716, longitude=77.5946),
+        Location(id="loc2", name="Location 2", latitude=12.2958, longitude=76.6394),
+        Location(id="loc3", name="Location 3", latitude=13.0827, longitude=80.2707)
+    ]
+    
+    # Test Round Trip
+    result_round = optimize_route(locations, trip_type="round_trip")
+    assert result_round.total_distance_km > 0
+    assert len(result_round.ordered_stops) == 3
+    
+    # Test One Way
+    result_one_way = optimize_route(locations, trip_type="one_way")
+    assert len(result_one_way.ordered_stops) == 3

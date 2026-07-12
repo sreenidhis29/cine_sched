@@ -87,18 +87,52 @@ export function Sidebar() {
     }
   }, [projectId]);
 
-  // Project-scoped navigation items
-  const projectNavItems = [
-    { label: 'Constraints Editor', icon: 'edit_note', href: `/projects/${projectId}` },
-    { label: 'Master Schedule', icon: 'calendar_month', href: `/projects/${projectId}/schedule` },
-    { label: 'Approvals', icon: 'fact_check', href: `/projects/${projectId}/approvals` },
-    { label: 'Project Team', icon: 'groups', href: `/projects/${projectId}/team` },
-    { label: 'Resource Manager', icon: 'people', href: `/resources?projectId=${projectId}` },
-    { label: 'Locations', icon: 'location_on', href: `/locations?projectId=${projectId}` },
-    { label: 'Budget Monitor', icon: 'attach_money', href: `/budget?projectId=${projectId}` },
-    { label: 'Analytics', icon: 'monitoring', href: `/analytics?projectId=${projectId}` },
-    { label: 'Reports', icon: 'description', href: `/reports?projectId=${projectId}` },
-  ];
+  // Project-scoped navigation grouped sections
+  const sections = {
+    PLANNING: [
+      { label: 'Constraints Editor', icon: 'edit_note', href: `/projects/${projectId}` },
+      { label: 'Locations', icon: 'location_on', href: `/locations?projectId=${projectId}` },
+      { label: 'Route Planner', icon: 'route', href: `/projects/${projectId}/route-plan` },
+      { label: 'Shoot Planner', icon: 'calendar_month', href: `/projects/${projectId}/shoot-window-plan` },
+      { label: 'Cost Planner', icon: 'payments', href: `/projects/${projectId}/budget-plan` },
+      { label: 'Master Schedule', icon: 'schedule', href: `/projects/${projectId}/schedule` },
+    ],
+    'TEAM & APPROVALS': [
+      { label: 'Project Team', icon: 'groups', href: `/projects/${projectId}/team` },
+      { label: 'Approvals', icon: 'fact_check', href: `/projects/${projectId}/approvals` },
+    ],
+    RESOURCES: [
+      { label: 'Resource Manager', icon: 'people', href: `/resources?projectId=${projectId}` },
+      { label: 'Budget Monitor', icon: 'attach_money', href: `/budget?projectId=${projectId}` },
+    ],
+    INSIGHTS: [
+      { label: 'Analytics', icon: 'monitoring', href: `/analytics?projectId=${projectId}` },
+      { label: 'Reports', icon: 'description', href: `/reports?projectId=${projectId}` },
+    ]
+  };
+
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    PLANNING: true,
+    'TEAM & APPROVALS': false,
+    RESOURCES: false,
+    INSIGHTS: false
+  });
+
+  useEffect(() => {
+    if (!projectId) return;
+    const activeSection = Object.entries(sections).find(([_, items]) =>
+      items.some(item => {
+        const itemPath = item.href.split('?')[0];
+        return pathname === itemPath || (itemPath !== '/' && pathname.startsWith(itemPath));
+      })
+    );
+    if (activeSection) {
+      setExpandedSections(prev => ({
+        ...prev,
+        [activeSection[0]]: true
+      }));
+    }
+  }, [pathname, projectId]);
 
   // Global navigation items (when outside a project)
   const globalNavItems = [
@@ -140,35 +174,61 @@ export function Sidebar() {
       )}
 
       {/* Main Navigation */}
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 py-4 px-3 space-y-4 overflow-y-auto custom-scrollbar">
         {isProjectContext ? (
           <>
             {/* Back to Portfolio Button */}
             <Link 
               href="/projects" 
-              className="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40 transition-colors mb-4 border border-outline-variant/20 bg-surface-container-low/30"
+              className="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40 transition-colors mb-2 border border-outline-variant/20 bg-surface-container-low/30"
             >
               <span className="material-symbols-outlined text-[18px]">arrow_back</span>
               <span className="font-label-md text-[12px] tracking-wide uppercase">All Projects</span>
             </Link>
 
-            {projectNavItems.map((item, i) => {
-              // Path matches exactly or is a sub-path
-              const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href.split('?')[0]));
-              
+            {Object.entries(sections).map(([sectionName, items]) => {
+              const isExpanded = !!expandedSections[sectionName];
               return (
-                <Link 
-                  key={i} 
-                  href={item.href} 
-                  className={`flex items-center gap-3 px-3 py-2 rounded transition-colors group ${
-                    isActive 
-                      ? 'bg-primary-container/10 text-primary-container font-bold' 
-                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'
-                  }`}
-                >
-                  <span className={`material-symbols-outlined text-[20px] transition-colors ${isActive ? 'text-primary-container' : 'group-hover:text-primary-container'}`}>{item.icon}</span>
-                  <span className="font-label-md text-[13px] tracking-wide uppercase">{item.label}</span>
-                </Link>
+                <div key={sectionName} className="space-y-1">
+                  {/* Section Header */}
+                  <button
+                    onClick={() => {
+                      setExpandedSections(prev => ({
+                        ...prev,
+                        [sectionName]: !prev[sectionName]
+                      }));
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-1 text-[10px] font-label-md uppercase tracking-wider text-on-surface-variant/80 hover:text-on-surface transition-colors"
+                  >
+                    <span>{sectionName}</span>
+                    <span className="material-symbols-outlined text-[14px] font-bold select-none">
+                      {isExpanded ? 'expand_more' : 'chevron_right'}
+                    </span>
+                  </button>
+
+                  {/* Section Items */}
+                  {isExpanded && (
+                    <div className="pl-1.5 space-y-0.5">
+                      {items.map((item, i) => {
+                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href.split('?')[0]));
+                        return (
+                          <Link 
+                            key={i} 
+                            href={item.href} 
+                            className={`flex items-center gap-3 px-3 py-1.5 rounded transition-all group ${
+                              isActive 
+                                ? 'bg-primary-container/10 text-primary-container font-bold' 
+                                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'
+                            }`}
+                          >
+                            <span className={`material-symbols-outlined text-[18px] transition-colors ${isActive ? 'text-primary-container' : 'group-hover:text-primary-container'}`}>{item.icon}</span>
+                            <span className="font-label-sm text-[12px] tracking-wide uppercase">{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </>

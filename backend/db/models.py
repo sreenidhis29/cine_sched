@@ -345,3 +345,19 @@ class AgentMemory(Base):
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     project : Project = relationship("Project")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLANNER RUN PERSISTENCE
+# ─────────────────────────────────────────────────────────────────────────────
+class PlannerRun(Base):
+    __tablename__ = "planner_runs"
+
+    id          = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    project_id  = Column(UUID(as_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    plan_type   = Column(String, nullable=False)  # "route", "shoot_window", "budget"
+    config_json = Column(JSON, nullable=False, default=dict)
+    result_json = Column(JSON, nullable=False, default=dict)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+
+    project : Project = relationship("Project")

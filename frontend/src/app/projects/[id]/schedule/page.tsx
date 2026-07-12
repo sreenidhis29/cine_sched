@@ -17,6 +17,7 @@ export default function ScheduleViewPage() {
   const [schedule, setSchedule] = useState<any>(null);
   const [scenes, setScenes] = useState<any[]>([]);
   const [budget, setBudget] = useState<any>(null);
+  const [budgetPlan, setBudgetPlan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   // Phase 4: weather forecast data (keyed by shoot_day string)
   const [dayForecasts, setDayForecasts] = useState<Record<string, any>>({});
@@ -54,16 +55,22 @@ export default function ScheduleViewPage() {
         const scheduleData = await apiClient.get(`/api/projects/${projectId}/schedule`);
         if (scheduleData) {
           setSchedule(scheduleData);
-          // Phase 4: extract day_forecasts from the extra_context if stored
-          // (The backend attaches these via the weather_agent state.)
-          // For now we parse them from the schedule's violations advisory strings
-          // and also check for a dedicated forecast endpoint in future phases.
           const forecasts = scheduleData?.extra_context?.day_forecasts || {};
           setDayForecasts(forecasts);
         }
       } catch (e) {
         console.error("Failed to load schedule (might not exist yet):", e);
       }
+
+      try {
+        const budgetPlanData = await apiClient.get(`/api/projects/${projectId}/planner-runs?plan_type=budget`);
+        if (budgetPlanData && budgetPlanData.result_json) {
+          setBudgetPlan(budgetPlanData.result_json);
+        }
+      } catch (e) {
+        console.error("Failed to load budget planner run:", e);
+      }
+
       setLoading(false);
     };
     fetchData();
@@ -274,54 +281,152 @@ export default function ScheduleViewPage() {
         {/* Right Side Panel */}
         <div className="w-[320px] flex-shrink-0 flex flex-col gap-gutter overflow-y-auto custom-scrollbar pb-8">
           
+          {/* Planner Attribution Badge */}
+          {schedule && (() => {
+            const hasRouteAttribution = !!schedule?.extra_context?.route_plan_run_id;
+            const hasShootAttribution = !!schedule?.extra_context?.shoot_window_plan_run_id;
+            return (
+              <div className={`border rounded-xl p-3 shadow-md flex items-center gap-2.5 ${
+                hasRouteAttribution || hasShootAttribution 
+                  ? 'bg-success-container/10 border-success/30 text-success' 
+                  : 'bg-surface-container-low border-outline-variant/30 text-on-surface-variant'
+              }`}>
+                {hasRouteAttribution || hasShootAttribution ? (
+                  <>
+                    <span className="material-symbols-outlined text-success text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] font-label-md uppercase tracking-wider font-bold">✓ Planner-Optimized</div>
+                      <p className="text-[9px] text-on-surface-variant/80 truncate leading-normal mt-0.5">
+                        Incorporate: {[hasRouteAttribution && "Route Plan", hasShootAttribution && "Shoot Plan"].filter(Boolean).join(" & ")}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-on-surface-variant/60 text-[20px]">info</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] font-label-md uppercase tracking-wider font-bold">Standard Schedule</div>
+                      <p className="text-[9px] text-on-surface-variant/80 leading-normal mt-0.5">
+                        No routing or shoot preferences applied.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Financial Status Panel */}
           {schedule && (
-            <Card className="flex-shrink-0">
-              <h3 className="font-label-md uppercase tracking-wider text-on-surface-variant mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
-                Financial Status
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-[11px] font-label-md uppercase tracking-wider text-on-surface-variant mb-1">
-                    <span>Burn Rate</span>
-                    <span className="text-primary-container">
-                      {budget && parseFloat(budget.total_limit) > 0 
-                        ? `${Math.min(100, (schedule.total_cost / parseFloat(budget.total_limit)) * 100).toFixed(0)}%` 
-                        : '0%'}
-                    </span>
+            budgetPlan ? (
+              <Card className="flex-shrink-0">
+                <h3 className="font-label-md uppercase tracking-wider text-on-surface-variant mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+                  Financial Status
+                </h3>
+                
+                <div className="space-y-3">
+                  <div className="divide-y divide-outline-variant/15 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
+                    {budgetPlan.categories.map((cat: any) => (
+                      <div key={cat.name} className="py-2 flex justify-between items-center text-xs">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-on-surface">{cat.name}</span>
+                          <span className="text-[9px] text-on-surface-variant/85 uppercase tracking-wide">
+                            {cat.is_estimate ? 'Estimate' : 'Optimized'}
+                          </span>
+                        </div>
+                        <span className="font-mono-data text-on-surface">
+                          ${cat.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="h-1.5 w-full bg-surface-bright rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary-container rounded-full" 
-                      style={{ 
-                        width: `${budget && parseFloat(budget.total_limit) > 0 
-                          ? Math.min(100, (schedule.total_cost / parseFloat(budget.total_limit)) * 100) 
-                          : 0}%` 
-                      }} 
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-outline-variant/30">
-                  <div>
-                    <div className="font-label-md text-[10px] text-on-surface-variant uppercase mb-1">Estimated Cost</div>
-                    <div className="font-mono-data text-on-surface text-[14px]">
-                      {schedule.total_cost !== undefined && schedule.total_cost !== null 
-                        ? `$${schedule.total_cost.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
-                        : '$N/A'}
+
+                  <div className="pt-3 border-t border-outline-variant/30 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-label-md uppercase tracking-wider text-on-surface-variant">Cost Plan Total</span>
+                      <span className="font-mono-data text-base font-bold text-primary-container">
+                        ${budgetPlan.optimized_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-label-md uppercase tracking-wider text-on-surface-variant">Budget Cap</span>
+                      <span className="font-mono-data text-xs text-on-surface-variant">
+                        ${budgetPlan.budget_cap.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px] pt-1">
+                      <span className="text-on-surface-variant">
+                        {budgetPlan.over_under_amount < 0 ? 'Over Cap By' : 'Remaining Cap'}
+                      </span>
+                      <span className={`font-mono-data font-bold ${budgetPlan.over_under_amount < 0 ? 'text-error' : 'text-success'}`}>
+                        ${Math.abs(budgetPlan.over_under_amount).toLocaleString()}
+                      </span>
                     </div>
                   </div>
+                </div>
+              </Card>
+            ) : (
+              <Card className="flex-shrink-0">
+                <h3 className="font-label-md uppercase tracking-wider text-on-surface-variant mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+                  Financial Status
+                </h3>
+                <div className="space-y-4">
                   <div>
-                    <div className="font-label-md text-[10px] text-on-surface-variant uppercase mb-1">Budget Cap</div>
-                    <div className="font-mono-data text-on-surface-variant text-[14px]">
-                      {budget && parseFloat(budget.total_limit) > 0 
-                        ? `$${parseFloat(budget.total_limit).toLocaleString('en-US', { maximumFractionDigits: 0 })}` 
-                        : '$N/A'}
+                    <div className="flex justify-between text-[11px] font-label-md uppercase tracking-wider text-on-surface-variant mb-1">
+                      <span>Burn Rate</span>
+                      <span className="text-primary-container">
+                        {budget && parseFloat(budget.total_limit) > 0 
+                          ? `${Math.min(100, (schedule.total_cost / parseFloat(budget.total_limit)) * 100).toFixed(0)}%` 
+                          : '0%'}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-surface-bright rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary-container rounded-full" 
+                        style={{ 
+                          width: `${budget && parseFloat(budget.total_limit) > 0 
+                            ? Math.min(100, (schedule.total_cost / parseFloat(budget.total_limit)) * 100) 
+                            : 0}%` 
+                        }} 
+                      />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-outline-variant/30">
+                    <div>
+                      <div className="font-label-md text-[10px] text-on-surface-variant uppercase mb-1">Estimated Cost</div>
+                      <div className="font-mono-data text-on-surface text-[14px]">
+                        {schedule.total_cost !== undefined && schedule.total_cost !== null 
+                          ? `$${schedule.total_cost.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
+                          : '$N/A'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-label-md text-[10px] text-on-surface-variant uppercase mb-1">Budget Cap</div>
+                      <div className="font-mono-data text-on-surface-variant text-[14px]">
+                        {budget && parseFloat(budget.total_limit) > 0 
+                          ? `$${parseFloat(budget.total_limit).toLocaleString('en-US', { maximumFractionDigits: 0 })}` 
+                          : '$N/A'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-2.5 border-t border-outline-variant/20 flex flex-col gap-1.5">
+                    <p className="text-[10px] text-on-surface-variant/90 italic leading-normal">
+                      For optimized travel costs and weather dates, run the Cost Planner.
+                    </p>
+                    <Link 
+                      href={`/projects/${projectId}/budget-plan`}
+                      className="w-full text-center px-3 py-1.5 border border-primary-container/30 text-primary-container hover:bg-primary-container/10 rounded text-[10px] font-label-md uppercase tracking-wider font-semibold transition-all"
+                    >
+                      Run Cost Planner
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )
           )}
 
           {/* AI Analysis Card */}

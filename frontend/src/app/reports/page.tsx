@@ -7,7 +7,7 @@ import { ProjectSelector } from '@/components/ui/ProjectSelector';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
 
-export default function ReportsPage() {
+function ReportsPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -319,5 +319,19 @@ export default function ReportsPage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <React.Suspense fallback={
+      <AppShell>
+        <div className="p-8 text-center text-on-surface-variant italic font-body-md">
+          Loading Reports...
+        </div>
+      </AppShell>
+    }>
+      <ReportsPageContent />
+    </React.Suspense>
   );
 }
