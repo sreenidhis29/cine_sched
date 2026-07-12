@@ -173,39 +173,21 @@ export function WeatherForecastStrip({ dayForecasts }: WeatherForecastStripProps
   const highRiskCount = days.filter(d => d.is_high_risk).length;
 
   return (
-    <div style={{
-      padding: '12px 16px',
-      backgroundColor: 'rgba(255,255,255,0.04)',
-      borderRadius: '12px',
-      border: '1px solid rgba(255,255,255,0.08)',
-      marginBottom: '16px',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        marginBottom: '10px',
-      }}>
-        <span style={{ fontSize: '14px', fontWeight: 600, color: '#cdd6f4' }}>
-          🌤 Weather Forecast
+    <div className="bg-surface-container-low border border-outline-variant/30 rounded-2xl p-4 mb-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="font-headline-sm text-sm font-bold text-on-surface uppercase tracking-wider flex items-center gap-2">
+          <span className="material-symbols-outlined text-[18px]">cloud</span> Weather Forecast
         </span>
         {highRiskCount > 0 && (
-          <span style={{
-            backgroundColor: 'rgba(234, 88, 12, 0.2)',
-            color: '#ea580c',
-            padding: '2px 8px',
-            borderRadius: '10px',
-            fontSize: '11px',
-            fontWeight: 600,
-          }}>
+          <span className="bg-error-container/20 text-error-container px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-error-container/30">
             {highRiskCount} high-risk day{highRiskCount > 1 ? 's' : ''}
           </span>
         )}
       </div>
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <div className="flex gap-3 flex-wrap">
         {days.map(d => (
-          <div key={d.day} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#6c7086', marginBottom: '4px' }}>
+          <div key={d.day} className="text-center bg-surface-container p-2 rounded-xl border border-outline-variant/20 min-w-[60px]">
+            <div className="text-[10px] font-bold text-on-surface-variant uppercase mb-1">
               Day {d.day}
             </div>
             <WeatherBadge

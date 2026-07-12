@@ -97,7 +97,7 @@ def sync_schedule(
     """Syncs the accepted schedule to the user's Google Calendar."""
     creds_dict = load_token(user_id)
     if not creds_dict:
-        raise HTTPException(status_code=401, detail="Google Calendar not connected.")
+        raise HTTPException(status_code=400, detail="Google Calendar not connected.")
     
     creds = Credentials.from_authorized_user_info(creds_dict)
     service = build('calendar', 'v3', credentials=creds)

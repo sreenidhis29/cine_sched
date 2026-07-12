@@ -164,7 +164,45 @@ export default function LocationsPage() {
               }
             >
               <form className="space-y-4" onSubmit={handleSave}>
-                <Input label="Name" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Input label="Name / Address" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      if (!formData.name) return;
+                      try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(formData.name)}&format=json&limit=1`, {
+                          headers: {
+                            'User-Agent': 'CineSched/1.0'
+                          }
+                        });
+                        const data = await res.json();
+                        if (data && data.length > 0) {
+                          setFormData({
+                            ...formData,
+                            latitude: parseFloat(data[0].lat),
+                            longitude: parseFloat(data[0].lon)
+                          });
+                          alert(`Found coordinates: ${data[0].lat}, ${data[0].lon}`);
+                        } else {
+                          alert('Address not found.');
+                        }
+                      } catch (e) {
+                        alert('Error fetching coordinates.');
+                      }
+                    }}
+                    className="h-[42px] px-3 bg-surface-variant hover:bg-surface-variant/80 text-on-surface rounded border border-outline-variant transition-colors flex items-center gap-1 font-label-md text-xs"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">travel_explore</span>
+                    Geocode
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Latitude (Optional)" type="number" step="any" value={formData.latitude || ''} onChange={(e) => setFormData({...formData, latitude: parseFloat(e.target.value)})} />
+                  <Input label="Longitude (Optional)" type="number" step="any" value={formData.longitude || ''} onChange={(e) => setFormData({...formData, longitude: parseFloat(e.target.value)})} />
+                </div>
                 <Input label="Cost Per Day" type="number" value={formData.cost_per_day || ''} onChange={(e) => setFormData({...formData, cost_per_day: parseFloat(e.target.value)})} />
               </form>
             </Modal>

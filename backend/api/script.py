@@ -15,7 +15,7 @@ try:
 except ImportError:
     PdfReader = None
 
-router = APIRouter(prefix="/api/projects", tags=["script"])
+router = APIRouter()
 
 def _require_project_manager(project_id: str, user_id: str, db: Session):
     from api.projects import _require_project

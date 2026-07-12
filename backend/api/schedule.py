@@ -126,14 +126,38 @@ def _save_schedule(
 
     # Save schedule entries
     if solver_result and solver_result.feasible:
+        # Group entries by day to calculate sequential times
+        from collections import defaultdict
+        days_map = defaultdict(list)
         for entry in solver_result.schedule:
-            se = ScheduleEntry(
-                id=str(uuid4()),
-                schedule_id=schedule.id,
-                scene_id=entry.scene_id,
-                shoot_day=entry.shoot_day,
-            )
-            db.add(se)
+            days_map[entry.shoot_day].append(entry)
+            
+        for day, entries in days_map.items():
+            # Sort entries arbitrarily (could sort by location in a real app)
+            current_time_minutes = 8 * 60  # Start at 8:00 AM
+            
+            for entry in entries:
+                # Query scene to get its duration
+                scene_db = db.query(Scene).filter(Scene.id == entry.scene_id).first()
+                duration = scene_db.duration_minutes if scene_db and scene_db.duration_minutes else 60
+                
+                start_h, start_m = divmod(current_time_minutes, 60)
+                start_time_str = f"{start_h:02d}:{start_m:02d}:00"
+                
+                current_time_minutes += duration
+                
+                end_h, end_m = divmod(current_time_minutes, 60)
+                end_time_str = f"{end_h:02d}:{end_m:02d}:00"
+
+                se = ScheduleEntry(
+                    id=str(uuid4()),
+                    schedule_id=schedule.id,
+                    scene_id=entry.scene_id,
+                    shoot_day=entry.shoot_day,
+                    start_time=start_time_str,
+                    end_time=end_time_str,
+                )
+                db.add(se)
             
     # Phase 5: Create Approval record if needed
     if final_state.get("pending_approval"):

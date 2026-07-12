@@ -20,20 +20,27 @@ router = APIRouter()
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+from fastapi import Request
+
 def get_current_user_id(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
 ) -> str:
     """
     FastAPI dependency — validates the Supabase JWT and returns the user_id (sub claim).
     Raises 401 if the token is missing or invalid.
     """
-    if not credentials:
+    token = None
+    if credentials:
+        token = credentials.credentials
+    elif request.query_params.get("token"):
+        token = request.query_params.get("token")
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authentication token",
         )
-
-    token = credentials.credentials
 
     try:
         # Supabase JWTs are HS256-signed with the project JWT secret.

@@ -65,7 +65,7 @@ export function TopBar() {
     apiClient.get('/api/auth/me').then(data => {
       if (data && data.name) {
         setUser(data);
-        
+
         // Setup initial org
         const savedOrg = sessionStorage.getItem('active_org_id');
         const orgs = data.organizations || [];
@@ -86,7 +86,7 @@ export function TopBar() {
   const handleSignOut = () => {
     sessionStorage.removeItem('access_token');
     sessionStorage.removeItem('active_org_id');
-    router.push('/login');
+    router.push('/');
   };
 
   const handleOrgChange = (orgId: string) => {
@@ -96,7 +96,7 @@ export function TopBar() {
     window.location.reload();
   };
 
-  const initials = user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase() : 'JD';
+  const initials = user?.name ? user.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'JD';
   const displayName = user?.name || 'J. Doe';
   const activeOrg = user?.organizations?.find((o: any) => o.org_id === activeOrgId);
 
@@ -104,7 +104,7 @@ export function TopBar() {
 
   return (
     <header className="h-16 border-b border-outline-variant/30 bg-background/80 backdrop-blur-md sticky top-0 z-40 flex items-center justify-between px-6 pl-[296px]">
-      
+
       {/* Organization Switcher & Nav */}
       <nav className="flex items-center gap-6">
         {user?.organizations && user.organizations.length > 0 && (
@@ -112,10 +112,10 @@ export function TopBar() {
             <span className="material-symbols-outlined text-[16px] text-primary-container mr-2">domain</span>
             <span className="font-bold mr-2 text-on-surface">{activeOrg?.org_name || 'Select Org'}</span>
             <span className="material-symbols-outlined text-[16px] text-on-surface-variant">arrow_drop_down</span>
-            
+
             <div className="absolute top-full left-0 mt-1 bg-surface-container-low border border-outline-variant rounded shadow-xl min-w-[200px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
               {user.organizations.map((org: any) => (
-                <button 
+                <button
                   key={org.org_id}
                   onClick={() => handleOrgChange(org.org_id)}
                   className={`w-full text-left px-4 py-2 hover:bg-surface-variant transition-colors flex items-center justify-between ${org.org_id === activeOrgId ? 'text-primary-container font-bold' : 'text-on-surface'}`}
@@ -139,7 +139,7 @@ export function TopBar() {
       <div className="flex items-center gap-4">
         {/* Notifications */}
         <div className="relative">
-          <button 
+          <button
             onClick={() => setShowNotifications(!showNotifications)}
             className={`relative p-2 rounded transition-colors ${showNotifications ? 'bg-surface-variant text-on-surface' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'}`}
           >
@@ -156,7 +156,7 @@ export function TopBar() {
                 <div className="p-4 border-b border-outline-variant/30 flex justify-between items-center bg-surface-container-highest">
                   <h4 className="font-headline-sm text-sm font-bold text-on-surface">Notifications</h4>
                   {hasUnread && (
-                    <button 
+                    <button
                       onClick={markAllRead}
                       className="text-[11px] font-label-md uppercase tracking-wider text-primary-container hover:underline"
                     >
@@ -171,8 +171,8 @@ export function TopBar() {
                     </div>
                   ) : (
                     notifications.map(n => (
-                      <div 
-                        key={n.id} 
+                      <div
+                        key={n.id}
                         className={`p-4 transition-colors hover:bg-surface-variant/20 ${n.read ? 'opacity-70' : 'bg-primary-container/5 border-l-2 border-primary-container'}`}
                       >
                         <div className="flex justify-between items-start gap-2 mb-1">
@@ -192,16 +192,16 @@ export function TopBar() {
             </>
           )}
         </div>
-        
+
         <div className="h-6 w-px bg-outline-variant/50"></div>
-        
+
         <button className="flex items-center gap-2 p-1 pl-2 pr-3 rounded-full hover:bg-surface-variant/40 transition-colors border border-outline-variant/30 group relative">
           <div className="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center text-[10px] font-bold text-on-surface">
             {initials}
           </div>
           <span className="font-label-md text-[12px] text-on-surface">{displayName}</span>
           <span className="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
-          
+
           <div className="absolute top-full mt-2 right-0 bg-surface-container-low border border-outline-variant rounded shadow-xl py-2 min-w-[150px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
             <div className="px-4 py-2 border-b border-outline-variant/30 mb-1">
               <div className="font-label-md text-on-surface">{displayName}</div>
@@ -214,7 +214,7 @@ export function TopBar() {
           </div>
         </button>
       </div>
-      
+
     </header>
   );
 }

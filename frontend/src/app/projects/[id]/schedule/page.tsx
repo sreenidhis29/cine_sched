@@ -181,7 +181,7 @@ export default function ScheduleViewPage() {
               </button>
               <button 
                 onClick={() => {
-                  window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/1`, '_blank');
+                  window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/1?token=${sessionStorage.getItem('access_token') || ''}`, '_blank');
                 }}
                 className="flex items-center gap-2 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-3.5 py-2 rounded font-label-md uppercase tracking-wider font-bold transition-all text-xs"
               >
@@ -225,7 +225,7 @@ export default function ScheduleViewPage() {
                     )}
                     <button 
                       onClick={() => {
-                        window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/${day.day}`, '_blank');
+                        window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/projects/${projectId}/callsheet/${day.day}?token=${sessionStorage.getItem('access_token') || ''}`, '_blank');
                       }}
                       className="ml-auto flex items-center gap-1.5 border border-outline-variant text-on-surface hover:bg-surface-variant/50 px-2 py-1 rounded font-label-md uppercase tracking-wider font-bold transition-all text-[10px]"
                     >
