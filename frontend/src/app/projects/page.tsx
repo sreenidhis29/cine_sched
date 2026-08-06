@@ -7,8 +7,10 @@ import { Card } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/apiClient';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function DashboardPage() {
+  const confirm = useConfirm();
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,13 +21,12 @@ export default function DashboardPage() {
         // Map backend data to UI format
         const mapped = data.map((p: any, i: number) => {
           const colors = ['bg-indigo-900', 'bg-amber-900', 'bg-red-900', 'bg-surface-bright'];
-          const statuses = ['in-progress', 'completed', 'conflict', 'draft'];
           return {
             id: p.id,
             name: p.name,
-            status: statuses[i % statuses.length],
-            nextShoot: '2024-11-15', // Placeholder
-            budgetUsage: 75 + (i * 10), // Placeholder
+            status: p.status || 'draft',
+            nextShoot: p.next_shoot || 'Not Scheduled',
+            budgetUsage: p.budget_usage || 0,
             imgColor: colors[i % colors.length]
           };
         });
@@ -45,7 +46,13 @@ export default function DashboardPage() {
   const handleDeleteProject = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm('Are you sure you want to permanently delete this project? This will delete all associated scenes, cast, locations, and schedules.')) return;
+    const isConfirmed = await confirm({
+      title: 'Delete Project',
+      message: 'Are you sure you want to permanently delete this project? This will delete all associated scenes, cast, locations, and schedules.',
+      confirmText: 'Delete Project',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     setLoading(true);
     try {
       await apiClient.delete(`/api/projects/${id}`);
@@ -55,7 +62,9 @@ export default function DashboardPage() {
       fetchProjects();
     } catch (err) {
       console.error(err);
-      alert('Failed to delete project');
+      window.dispatchEvent(new CustomEvent('new-notification', { 
+        detail: { title: 'Error', message: 'Failed to delete project.' } 
+      }));
       setLoading(false);
     }
   };

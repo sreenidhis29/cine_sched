@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Marquee } from '@/components/ui/Marquee';
 import { Briefcase, Navigation, Sun, DollarSign, Calendar } from 'lucide-react';
+import { Dither } from '@/components/ui/Dither';
 
 const reviews = [
   {
@@ -117,7 +118,7 @@ const GridItem = ({ area, icon, title, description }: GridItemProps) => {
             }}
           />
         )}
-        
+
         {/* Card Inner Content */}
         <div className="relative h-full w-full rounded-[13px] bg-[#1a1b1b] p-6 flex flex-col justify-between gap-6 overflow-hidden">
           <div className="relative flex flex-1 flex-col justify-between gap-4 z-10">
@@ -187,15 +188,11 @@ export default function HeroPage() {
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
-        {/* Background Image with Overlay */}
+        {/* Background Shader with Overlay */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-black/45 z-10"></div>
-          <img
-            src="/hero-bg.png"
-            className="w-full h-full object-cover"
-            alt="Professional film production studio at night with cinema camera rigs and tungsten lighting"
-          />
-          <div className="hero-gradient absolute inset-0 z-20"></div>
+          <div className="absolute inset-0 bg-black/60 z-10 pointer-events-none"></div>
+          <Dither waveColor={[1.0, 0.72, 0.0]} waveSpeed={0.02} colorNum={5} pixelSize={3} />
+          <div className="hero-gradient absolute inset-0 z-20 pointer-events-none"></div>
         </div>
 
         <div className="relative z-30 max-w-7xl mx-auto px-margin-safe w-full">
@@ -223,18 +220,6 @@ export default function HeroPage() {
 
         {/* Floating Data Panels (Decorative) */}
         <div className="hidden lg:block absolute right-[5%] bottom-[15%] z-30 w-96 space-y-4">
-          <div className="glass-panel p-panel-padding rounded-xl border-l-4 border-primary-container animate-in fade-in slide-in-from-bottom-5 duration-700 shadow-2xl">
-            <div className="flex justify-between items-center mb-3">
-              <span className="font-mono-data text-mono-data text-primary-container uppercase">Constraint Analysis</span>
-              <span className="text-[10px] text-on-surface-variant">Live Feed</span>
-            </div>
-            <div className="space-y-2">
-              <div className="h-1 w-full bg-surface-container rounded overflow-hidden">
-                <div className="h-full bg-primary-container w-[78%]"></div>
-              </div>
-              <p className="font-mono-data text-[11px] text-on-surface/70">Resolving Cast Conflict: Lead Actor Block 12</p>
-            </div>
-          </div>
           <div className="glass-panel p-panel-padding rounded-xl animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-150 shadow-2xl">
             <div className="flex gap-4 items-center">
               <div className="w-12 h-12 rounded bg-surface-container-high flex items-center justify-center">
@@ -242,7 +227,7 @@ export default function HeroPage() {
               </div>
               <div>
                 <p className="font-headline-md text-sm text-on-surface">Agent Consensus</p>
-                <p className="font-body-md text-xs text-on-surface-variant">4 Agents on Optimization V2.1</p>
+                <p className="font-body-md text-xs text-on-surface-variant">5 Agents on Optimization V1.2</p>
               </div>
             </div>
           </div>
@@ -393,7 +378,7 @@ export default function HeroPage() {
               <p className="font-mono-data text-xs text-primary-container uppercase tracking-widest mb-2">PROVEN IN THE FIELD</p>
               <h3 className="font-headline-md text-2xl text-on-surface">Trusted by Leading Teams</h3>
             </div>
-            
+
             <Marquee pauseOnHover className="[--duration:25s]">
               {firstRow.map((review) => (
                 <ReviewCard key={review.username} {...review} />
@@ -404,7 +389,7 @@ export default function HeroPage() {
                 <ReviewCard key={review.username} {...review} />
               ))}
             </Marquee>
-            
+
             {/* Gradient Fades on edges */}
             <div className="pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-background to-transparent"></div>
             <div className="pointer-events-none absolute inset-y-0 right-0 w-1/4 bg-gradient-to-l from-background to-transparent"></div>

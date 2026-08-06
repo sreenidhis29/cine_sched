@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
 import dynamic from 'next/dynamic';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const LocationMapView = dynamic(() => import('@/components/ui/LocationMapView'), {
   ssr: false,
@@ -20,6 +21,7 @@ const LocationMapView = dynamic(() => import('@/components/ui/LocationMapView'),
 });
 
 function LocationsPageContent() {
+  const confirm = useConfirm();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -98,7 +100,13 @@ function LocationsPageContent() {
   };
 
   const handleDelete = async (item: any) => {
-    if (!confirm('Are you sure you want to delete this location?')) return;
+    const isConfirmed = await confirm({
+      title: 'Delete Location',
+      message: 'Are you sure you want to delete this location?',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     try {
       await apiClient.delete(`/api/projects/${projectId}/locations/${item.id}`);
       fetchData();

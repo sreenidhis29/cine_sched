@@ -4,8 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function AdminDashboardPage() {
+  const confirm = useConfirm();
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,22 +31,38 @@ export default function AdminDashboardPage() {
   }, []);
 
   const handleDeleteOrg = async (orgId: string, orgName: string) => {
-    if (!confirm(`Are you sure you want to delete the organization "${orgName}"? This will delete all its projects and schedules.`)) return;
+    const isConfirmed = await confirm({
+      title: 'Delete Organization',
+      message: `Are you sure you want to delete the organization "${orgName}"? This will delete all its projects and schedules.`,
+      confirmText: 'Delete Organization',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     try {
       await apiClient.delete(`/api/auth/admin/organizations/${orgId}`);
       fetchSummary();
     } catch (err: any) {
-      alert(`Error deleting organization: ${err.message}`);
+      window.dispatchEvent(new CustomEvent('new-notification', { 
+        detail: { title: 'Error', message: `Error deleting organization: ${err.message}` } 
+      }));
     }
   };
 
   const handleDeleteUser = async (userId: string, userEmail: string) => {
-    if (!confirm(`Are you sure you want to delete the user "${userEmail}"?`)) return;
+    const isConfirmed = await confirm({
+      title: 'Delete User',
+      message: `Are you sure you want to delete the user "${userEmail}"?`,
+      confirmText: 'Delete User',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     try {
       await apiClient.delete(`/api/auth/admin/users/${userId}`);
       fetchSummary();
     } catch (err: any) {
-      alert(`Error deleting user: ${err.message}`);
+      window.dispatchEvent(new CustomEvent('new-notification', { 
+        detail: { title: 'Error', message: `Error deleting user: ${err.message}` } 
+      }));
     }
   };
 

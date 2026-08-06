@@ -38,6 +38,52 @@ router = APIRouter()
 # ─────────────────────────────────────────────────────────────────────────────
 # PROJECT CRUD
 # ─────────────────────────────────────────────────────────────────────────────
+def populate_project_response(project, db: Session):
+    from db.models import Schedule, ScheduleEntry, Budget
+    from datetime import date
+    # 1. Status
+    schedules = db.query(Schedule).filter(Schedule.project_id == project.id).order_by(Schedule.created_at.desc()).all()
+    status = "draft"
+    if schedules:
+        latest = schedules[0]
+        if latest.violations:
+            status = "conflict"
+        else:
+            accepted = next((s for s in schedules if s.is_accepted), None)
+            if accepted:
+                last_entry = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == accepted.id).order_by(ScheduleEntry.shoot_date.desc(), ScheduleEntry.shoot_day.desc()).first()
+                if last_entry and last_entry.shoot_date and last_entry.shoot_date < date.today():
+                    status = "completed"
+                else:
+                    status = "in-progress"
+            else:
+                status = "in-progress"
+    
+    # 2. Budget Usage
+    budget_usage = 0.0
+    budget = db.query(Budget).filter(Budget.project_id == project.id).first()
+    if budget and budget.total_limit and float(budget.total_limit) > 0:
+        latest = schedules[0] if schedules else None
+        if latest and latest.total_cost:
+            budget_usage = round((float(latest.total_cost) / float(budget.total_limit)) * 100, 1)
+
+    # 3. Next Shoot
+    next_shoot = None
+    if schedules:
+        latest = schedules[0]
+        first_entry = db.query(ScheduleEntry).filter(ScheduleEntry.schedule_id == latest.id).order_by(ScheduleEntry.shoot_date.asc(), ScheduleEntry.shoot_day.asc()).first()
+        if first_entry:
+            if first_entry.shoot_date:
+                next_shoot = first_entry.shoot_date.isoformat()
+            else:
+                next_shoot = f"Day {first_entry.shoot_day}"
+
+    project.status = status
+    project.budget_usage = budget_usage
+    project.next_shoot = next_shoot
+    return project
+
+
 @router.get("", response_model=List[ProjectResponse])
 def list_projects(
     org_id: Optional[str] = None,
@@ -52,7 +98,10 @@ def list_projects(
     if org_id:
         query = query.filter(Project.org_id == org_id)
         
-    return query.all()
+    projects = query.all()
+    for p in projects:
+        populate_project_response(p, db)
+    return projects
 
 
 class ProjectCreateOrg(ProjectCreate):
@@ -73,6 +122,7 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    populate_project_response(project, db)
     return project
 
 
@@ -82,7 +132,9 @@ def get_project(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    return _require_project(project_id, user_id, db)
+    p = _require_project(project_id, user_id, db)
+    populate_project_response(p, db)
+    return p
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -97,6 +149,7 @@ def update_project(
         setattr(p, k, v)
     db.commit()
     db.refresh(p)
+    populate_project_response(p, db)
     return p
 
 

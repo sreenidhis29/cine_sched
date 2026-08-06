@@ -247,6 +247,8 @@ class Budget(Base):
     # Budget sub-caps extracted from production brief PDF (Phase 6)
     makeup_cap      = Column(Numeric(12, 2), nullable=True, default=0)
     contingency_cap = Column(Numeric(12, 2), nullable=True, default=0)
+    crew_cost_per_day = Column(Numeric(12, 2), nullable=True, default=0)
+    operational_cost_per_day = Column(Numeric(12, 2), nullable=True, default=0)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     project : Project = relationship("Project", back_populates="budget")

@@ -237,6 +237,8 @@ class BudgetBase(BaseModel):
     equipment_cap: Optional[float] = None
     makeup_cap: Optional[float] = None
     contingency_cap: Optional[float] = None
+    crew_cost_per_day: Optional[float] = None
+    operational_cost_per_day: Optional[float] = None
 
 
 class BudgetCreate(BudgetBase):
@@ -266,6 +268,8 @@ class ExtractedBudget(BaseModel):
     equipment_cap: Optional[float] = None
     makeup_cap: Optional[float] = None
     contingency_cap: Optional[float] = None
+    crew_cost_per_day: Optional[float] = None
+    operational_cost_per_day: Optional[float] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -289,6 +293,9 @@ class ProjectResponse(ProjectBase):
     org_id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    status: str = "draft"
+    budget_usage: float = 0.0
+    next_shoot: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -405,6 +412,8 @@ class SolverBudget(BaseModel):
     cast_cap: Optional[float] = None
     location_cap: Optional[float] = None
     equipment_cap: Optional[float] = None
+    crew_cost_per_day: Optional[float] = None
+    operational_cost_per_day: Optional[float] = None
 
 
 class SolverEntryResult(BaseModel):

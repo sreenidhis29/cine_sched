@@ -28,6 +28,8 @@ class ScheduleCostInput(BaseModel):
     locations: List[SolverLocation]
     equipment: List[SolverEquipment]
     schedule: List[SolverEntryResult]
+    crew_cost_per_day: float = 0.0
+    operational_cost_per_day: float = 0.0
 
 
 class ScheduleCostResult(BaseModel):
@@ -93,12 +95,16 @@ def calc_schedule_cost(inp: ScheduleCostInput) -> ScheduleCostResult:
         if eid in equip_map
     )
 
-    total_cost = cast_cost + location_cost + equipment_cost
+    num_days = len(shoot_days)
+    crew_total = inp.crew_cost_per_day * num_days
+    operational_total = inp.operational_cost_per_day * num_days
+    total_cost = cast_cost + location_cost + equipment_cost + crew_total + operational_total
 
     breakdown = {
         "cast": round(cast_cost, 2),
         "location": round(location_cost, 2),
         "equipment": round(equipment_cost, 2),
+        "crew_and_operational": round(crew_total + operational_total, 2),
     }
     # Per-person breakdown
     for cid, days in cast_active_days.items():
@@ -111,7 +117,7 @@ def calc_schedule_cost(inp: ScheduleCostInput) -> ScheduleCostResult:
         cast_cost=round(cast_cost, 2),
         location_cost=round(location_cost, 2),
         equipment_cost=round(equipment_cost, 2),
-        num_shoot_days=len(shoot_days),
+        num_shoot_days=num_days,
         cost_breakdown=breakdown,
     )
 

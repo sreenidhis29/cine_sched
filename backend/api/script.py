@@ -92,22 +92,24 @@ async def parse_script(
        - longitude: the longitude coordinate if explicitly mentioned (e.g. -79.3832, as a float or null)
        - cost_per_day: the rental cost per day if explicitly mentioned (as a float or 0.0)
 
-    --- PART 2: BUDGET FIGURES ---
-    Look for any Budget table or section in the document. Budget sections typically have
-    category rows with dollar amounts, e.g.:
+     --- PART 2: BUDGET & EXPENSES ---
+    Look for any Budget table, expense list, or operational cost breakdown in the document.
+    Extract the following if explicitly written:
       - "Cast (day rates + principals)"  -> cast_cap
       - "Locations (rental + permits)"   -> location_cap
       - "Equipment (camera, lighting, sound)" -> equipment_cap
       - "Makeup / Prosthetics / Stunts"  -> makeup_cap
       - "Overtime / Contingency Buffer" or "Contingency" -> contingency_cap
       - "TOTAL PRODUCTION BUDGET" or "Total" -> total_limit
+      - "Crew day rate", "Crew cost per day" or "daily crew allocation" -> crew_cost_per_day
+      - "Daily operational cost", "operational budget per day", or other daily overhead -> operational_cost_per_day
     Map only figures explicitly stated in the document to the correct fields.
-    IMPORTANT: If no budget section is present, output extracted_budget as null.
+    IMPORTANT: If no budget/expense section is present, output extracted_budget as null.
     Do NOT invent or estimate budget figures — only extract what is explicitly written.
 
     Output JSON with keys: scenes, cast_members, equipment, locations, extracted_budget.
     extracted_budget should be null if not found, otherwise an object with fields:
-    total_limit, cast_cap, location_cap, equipment_cap, makeup_cap, contingency_cap
+    total_limit, cast_cap, location_cap, equipment_cap, makeup_cap, contingency_cap, crew_cost_per_day, operational_cost_per_day
     (omit or set to null any category not found in the document).
 
     Document text:
@@ -314,6 +316,7 @@ def commit_script(
             for v in [
                 eb.total_limit, eb.cast_cap, eb.location_cap,
                 eb.equipment_cap, eb.makeup_cap, eb.contingency_cap,
+                eb.crew_cost_per_day, eb.operational_cost_per_day,
             ]
         )
         if has_any_figure:
@@ -328,6 +331,8 @@ def commit_script(
                     equipment_cap=eb.equipment_cap,
                     makeup_cap=eb.makeup_cap,
                     contingency_cap=eb.contingency_cap,
+                    crew_cost_per_day=eb.crew_cost_per_day or 0.0,
+                    operational_cost_per_day=eb.operational_cost_per_day or 0.0,
                 )
                 db.add(new_budget)
                 db.commit()

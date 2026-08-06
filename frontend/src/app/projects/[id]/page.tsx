@@ -10,11 +10,13 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
 import Loader from '@/components/ui/Loader';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function ProjectEditorPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
+  const confirm = useConfirm();
 
   const [activeTab, setActiveTab] = useState('Scenes');
   const [project, setProject] = useState<any>(null);
@@ -171,7 +173,13 @@ export default function ProjectEditorPage() {
   };
 
   const handleDelete = async (item: any) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    const isConfirmed = await confirm({
+      title: `Delete ${getSingularTab()}`,
+      message: `Are you sure you want to delete this ${getSingularTab().toLowerCase()}?`,
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     try {
       await apiClient.delete(`/api/projects/${projectId}/${activeTab.toLowerCase()}/${item.id}`);
       window.dispatchEvent(new CustomEvent('new-notification', { 

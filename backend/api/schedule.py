@@ -90,6 +90,8 @@ def _build_solver_data(project_id: str, db: Session) -> tuple:
         cast_cap=float(budget_db.cast_cap) if budget_db and budget_db.cast_cap else None,
         location_cap=float(budget_db.location_cap) if budget_db and budget_db.location_cap else None,
         equipment_cap=float(budget_db.equipment_cap) if budget_db and budget_db.equipment_cap else None,
+        crew_cost_per_day=float(budget_db.crew_cost_per_day) if budget_db and budget_db.crew_cost_per_day else 0.0,
+        operational_cost_per_day=float(budget_db.operational_cost_per_day) if budget_db and budget_db.operational_cost_per_day else 0.0,
     )
 
     # Phase 4: also return raw location DB records for coordinate extraction

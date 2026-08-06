@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import TargetCursor from "@/components/ui/TargetCursor";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 
 export const metadata: Metadata = {
   title: "CineSched | Agentic Film Scheduling",
@@ -17,7 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen antialiased bg-background text-on-surface">
-        {children}
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
+        <TargetCursor />
       </body>
     </html>
   );

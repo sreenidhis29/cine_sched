@@ -32,8 +32,16 @@ def compute_budget(
     equipment_cap = float(budget_db.equipment_cap) if (budget_db and budget_db.equipment_cap is not None) else 0.0
     
     # Direct pass through for unmodeled caps (makeup and contingency)
-    makeup_cap = float(getattr(budget_db, "makeup_cap", 0.0))
-    contingency_cap = float(getattr(budget_db, "contingency_cap", 0.0))
+    makeup_cap = float(getattr(budget_db, "makeup_cap", 0.0) or 0.0)
+    contingency_cap = float(getattr(budget_db, "contingency_cap", 0.0) or 0.0)
+    crew_cost_per_day = float(getattr(budget_db, "crew_cost_per_day", 0.0) or 0.0)
+    operational_cost_per_day = float(getattr(budget_db, "operational_cost_per_day", 0.0) or 0.0)
+
+    # Use crew cost from PDF if available (assuming 10-hour day); fallback to custom user rate from request
+    if crew_cost_per_day > 0:
+        effective_crew_rate = crew_cost_per_day / 10.0
+    else:
+        effective_crew_rate = crew_hourly_rate
 
     # Fetch project locations and cast members
     locations = db.query(Location).filter(Location.project_id == project_id).all()
@@ -109,9 +117,9 @@ def compute_budget(
         opt_travel_duration = float(route_plan["total_duration_min"])
         naive_travel_duration = float(route_plan.get("naive_order_total_duration_min", opt_travel_duration))
         
-        opt_travel_cost = (opt_travel_duration / 60.0) * crew_hourly_rate
-        naive_travel_cost = (naive_travel_duration / 60.0) * crew_hourly_rate
-        travel_note = f"Calculated using Route Plan travel duration (${crew_hourly_rate}/hr)"
+        opt_travel_cost = (opt_travel_duration / 60.0) * effective_crew_rate
+        naive_travel_cost = (naive_travel_duration / 60.0) * effective_crew_rate
+        travel_note = f"Calculated using Route Plan travel duration (${effective_crew_rate}/hr)"
     else:
         travel_note = "Run Route Planner for accurate travel cost (Naive baseline used)"
         # Default naive travel duration estimate using Haversine between locations sequence
@@ -125,7 +133,7 @@ def compute_budget(
             naive_duration += dur
         
         opt_travel_cost = 0.0
-        naive_travel_cost = (naive_duration / 60.0) * crew_hourly_rate
+        naive_travel_cost = (naive_duration / 60.0) * effective_crew_rate
 
     # ----------------------------------------------------
     # D. OVERNIGHT ACCOMMODATION COST
@@ -154,6 +162,13 @@ def compute_budget(
             if dur > OVERNIGHT_THRESHOLD_MIN:
                 triggered_naive += 1
         naive_overnight_cost = triggered_naive * OVERNIGHT_COST_PER_NIGHT
+
+    # ----------------------------------------------------
+    # E. OPERATIONAL DAILY COST
+    # ----------------------------------------------------
+    crew_daily_val = crew_cost_per_day if crew_cost_per_day > 0 else (effective_crew_rate * 10.0)
+    opt_ops_cost = (crew_daily_val + operational_cost_per_day) * total_shoot_days
+    naive_ops_cost = (crew_daily_val + operational_cost_per_day) * total_shoot_days
 
     # ----------------------------------------------------
     # BUILD BREAKDOWN CATEGORIES
@@ -190,6 +205,16 @@ def compute_budget(
             note="Budget sub-cap limit"
         ),
         BudgetCategory(
+            name="Crew & Daily Operational",
+            amount=round(opt_ops_cost, 2),
+            is_estimate=False,
+            note=(
+                f"Extracted rates: ${crew_cost_per_day + operational_cost_per_day}/day over {total_shoot_days} days"
+                if crew_cost_per_day > 0 else
+                f"Configured rates: ${effective_crew_rate}/hr crew + ${operational_cost_per_day}/day operational over {total_shoot_days} days"
+            )
+        ),
+        BudgetCategory(
             name="Makeup / Prosthetics / Stunts",
             amount=round(makeup_cap, 2),
             is_estimate=True,
@@ -211,7 +236,8 @@ def compute_budget(
         opt_overnight_cost + 
         equipment_cap + 
         makeup_cap + 
-        contingency_cap
+        contingency_cap +
+        opt_ops_cost
     )
     
     naive_total = (
@@ -221,7 +247,8 @@ def compute_budget(
         naive_overnight_cost + 
         equipment_cap + 
         makeup_cap + 
-        contingency_cap
+        contingency_cap +
+        naive_ops_cost
     )
 
     savings = max(0.0, naive_total - optimized_total)

@@ -16,6 +16,7 @@ from api.organizations import router as organizations_router
 from api.callsheet import router as callsheet_router
 from api.calendar import router as calendar_router
 from api.script import router as script_router
+from api.callsheet_personal import router as callsheet_personal_router
 
 # ── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -174,6 +175,7 @@ app.include_router(schedule_router, prefix="/api/projects", tags=["Schedule"])
 app.include_router(callsheet_router, prefix="/api/projects", tags=["Call Sheet"])
 app.include_router(calendar_router, prefix="/api/calendar", tags=["Calendar"])
 app.include_router(script_router, prefix="/api/projects", tags=["Script"])
+app.include_router(callsheet_personal_router, prefix="/api", tags=["Personal Call Sheet"])
 
 
 @app.get("/health")

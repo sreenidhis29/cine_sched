@@ -37,12 +37,17 @@ def budget_agent(state: GraphState) -> GraphState:
     entries   = schedule.schedule
 
     with Timer() as t:
+        crew_rate = float(budget.crew_cost_per_day) if budget and budget.crew_cost_per_day else 0.0
+        operational_rate = float(budget.operational_cost_per_day) if budget and budget.operational_cost_per_day else 0.0
+
         cost_result = calc_schedule_cost(ScheduleCostInput(
             scenes=scenes,
             cast=cast,
             locations=locations,
             equipment=equipment,
             schedule=entries,
+            crew_cost_per_day=crew_rate,
+            operational_cost_per_day=operational_rate,
         ))
 
         budget_result = check_budget_cap(BudgetCapInput(cost_result=cost_result, budget=budget))

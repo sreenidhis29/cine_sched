@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
 import { useParams } from 'next/navigation';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 export default function OrgSettingsPage() {
+  const confirm = useConfirm();
   const { id } = useParams() as { id: string };
   const [org, setOrg] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
@@ -69,7 +71,13 @@ export default function OrgSettingsPage() {
   };
 
   const handleRemove = async (memberId: string) => {
-    if (!confirm('Remove this member?')) return;
+    const isConfirmed = await confirm({
+      title: 'Remove Member',
+      message: 'Are you sure you want to remove this member from the organization?',
+      confirmText: 'Remove Member',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     try {
       await apiClient.delete(`/api/organizations/${id}/members/${memberId}`);
       fetchData();

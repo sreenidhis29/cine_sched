@@ -8,8 +8,10 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { apiClient } from '@/lib/apiClient';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 function ResourcesPageContent() {
+  const confirm = useConfirm();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -64,7 +66,13 @@ function ResourcesPageContent() {
   };
 
   const handleDelete = async (item: any) => {
-    if (!confirm('Are you sure you want to delete this resource?')) return;
+    const isConfirmed = await confirm({
+      title: 'Delete Resource',
+      message: 'Are you sure you want to delete this resource?',
+      confirmText: 'Delete',
+      type: 'danger'
+    });
+    if (!isConfirmed) return;
     try {
       await apiClient.delete(`/api/projects/${projectId}/${activeTab.toLowerCase()}/${item.id}`);
       fetchData();

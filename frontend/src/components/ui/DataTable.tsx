@@ -2,7 +2,7 @@ import React from 'react';
 
 interface Column<T> {
   header: string;
-  accessorKey: keyof T | string;
+  accessorKey?: keyof T | string;
   cell?: (item: T) => React.ReactNode;
   align?: 'left' | 'center' | 'right';
   isNumeric?: boolean;
@@ -47,7 +47,7 @@ export function DataTable<T>({ data, columns, className = '' }: DataTableProps<T
                     col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
                   }`}
                 >
-                  {col.cell ? col.cell(row) : (row as any)[col.accessorKey]}
+                  {col.cell ? col.cell(row) : col.accessorKey ? (row as any)[col.accessorKey] : null}
                 </td>
               ))}
             </tr>
