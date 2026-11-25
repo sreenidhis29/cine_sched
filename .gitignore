@@ -44,8 +44,9 @@ Thumbs.db
 # Alembic
 alembic.ini
 
-# Ignore all text files
+# Ignore all text files (except requirements.txt)
 *.txt
+!requirements.txt
 
 # Ignore .env files
 .env
