@@ -1,28 +1,28 @@
 """
-Google Gemini client wrapper for CineSched.
+Google Gemini client wrapper for CineSched using the modern google-genai SDK.
 Used as FALLBACK when Groq fails/times out/rate-limits.
 Model: gemini-2.5-flash
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
-_configured = False
+_client: Optional[genai.Client] = None
 
 
-def _ensure_configured() -> None:
-    global _configured
-    if not _configured:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        _configured = True
+def _get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client
 
 
 def chat(
@@ -33,36 +33,25 @@ def chat(
 ) -> str:
     """
     Send a chat request to Gemini and return the assistant's text.
-
-    Raises: google.api_core.exceptions.* on failure — caller (router.py) handles.
     """
-    _ensure_configured()
-    model = genai.GenerativeModel(
-        model_name=settings.GEMINI_MODEL,
-        system_instruction=system_prompt or None,
-        generation_config=genai.GenerationConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-        ),
-    )
+    client = _get_client()
 
-    # Convert OpenAI-style messages to Gemini history format
-    history = []
-    last_user_msg = ""
+    contents = []
     for msg in messages:
         role = "user" if msg["role"] == "user" else "model"
-        if msg["role"] == "user":
-            last_user_msg = msg["content"]
-            history.append({"role": role, "parts": [msg["content"]]})
-        elif msg["role"] == "assistant":
-            history.append({"role": "model", "parts": [msg["content"]]})
+        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
 
-    # Gemini chat session
-    if len(history) <= 1:
-        response = model.generate_content(last_user_msg or (messages[-1]["content"] if messages else ""))
-    else:
-        chat_session = model.start_chat(history=history[:-1])
-        response = chat_session.send_message(last_user_msg)
+    config = types.GenerateContentConfig(
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+        system_instruction=system_prompt or None,
+    )
+
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL,
+        contents=contents,
+        config=config,
+    )
 
     return response.text or ""
 
@@ -76,30 +65,24 @@ def structured_chat(
     """
     Same as chat() but requests JSON output from Gemini.
     """
-    _ensure_configured()
-    model = genai.GenerativeModel(
-        model_name=settings.GEMINI_MODEL,
+    client = _get_client()
+
+    contents = []
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+
+    config = types.GenerateContentConfig(
+        temperature=temperature,
+        max_output_tokens=max_tokens,
         system_instruction=(system_prompt or "") + "\n\nRespond ONLY with valid JSON.",
-        generation_config=genai.GenerationConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-            response_mime_type="application/json",
-        ),
+        response_mime_type="application/json",
     )
 
-    history = []
-    last_user_msg = ""
-    for msg in messages:
-        if msg["role"] == "user":
-            last_user_msg = msg["content"]
-            history.append({"role": "user", "parts": [msg["content"]]})
-        elif msg["role"] == "assistant":
-            history.append({"role": "model", "parts": [msg["content"]]})
-
-    if len(history) <= 1:
-        response = model.generate_content(last_user_msg or (messages[-1]["content"] if messages else ""))
-    else:
-        chat_session = model.start_chat(history=history[:-1])
-        response = chat_session.send_message(last_user_msg)
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL,
+        contents=contents,
+        config=config,
+    )
 
     return response.text or ""

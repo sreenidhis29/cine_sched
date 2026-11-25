@@ -197,7 +197,7 @@ class Scene(Base):
     # Phase 4: continuity tags — list of string labels shared across scenes that must
     # look visually consistent (e.g. "sarah-wardrobe", "rain-wet-street").
     # Scenes sharing a tag that end up far apart in the schedule get an advisory flag.
-    continuity_tags     = Column(JSON, default=list, nullable=False, server_default="'[]'")
+    continuity_tags     = Column(JSON, default=list, nullable=False, server_default="[]")
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
     project         : Project           = relationship("Project",    back_populates="scenes")

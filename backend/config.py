@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # ── App ───────────────────────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:3000"

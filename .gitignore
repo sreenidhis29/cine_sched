@@ -54,3 +54,8 @@ alembic.ini
 *.env
 .env.example
 stitch_tungsten_production_intelligence
+
+# Local databases & LLM cache
+*.db
+*.sqlite3
+backend/data/llm_cache/
